@@ -13,8 +13,11 @@ install_3xui() {
     ufw allow 80/tcp comment "ACME temp" > /dev/null 2>&1 || true
 
     # The installer asks interactive questions (confirm, port, SSL method, etc.)
-    # Feed "y" to confirm and empty lines for remaining prompts (accepts defaults)
-    yes "" | bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+    # Create an input file with empty lines to accept all defaults.
+    # Using a file instead of pipe (yes "") avoids SIGPIPE with set -o pipefail.
+    printf '\n%.0s' {1..100} > /tmp/xui-answers
+    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) < /tmp/xui-answers
+    rm -f /tmp/xui-answers
 
     # Close temporary port 80
     ufw delete allow 80/tcp > /dev/null 2>&1 || true
