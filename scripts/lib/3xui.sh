@@ -4,6 +4,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 XUI_BIN="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/x-ui"
+XUI_DB="/etc/x-ui/x-ui.db"
 
 install_3xui() {
     log_info "Installing 3X-UI panel..."
@@ -15,6 +16,21 @@ install_3xui() {
     else
         log_error "3X-UI installation failed"
         exit 1
+    fi
+}
+
+# Set a key-value pair in x-ui settings database
+xui_db_set() {
+    local key="$1"
+    local value="$2"
+
+    local exists
+    exists=$(sqlite3 "$XUI_DB" "SELECT COUNT(*) FROM settings WHERE key='$key';")
+
+    if [[ "$exists" -gt 0 ]]; then
+        sqlite3 "$XUI_DB" "UPDATE settings SET value='$value' WHERE key='$key';"
+    else
+        sqlite3 "$XUI_DB" "INSERT INTO settings (key, value) VALUES ('$key', '$value');"
     fi
 }
 
@@ -35,8 +51,7 @@ configure_3xui() {
     # Set admin credentials
     "$XUI_BIN" setting -username "$admin_user" -password "$admin_pass"
 
-    # Enable self-signed TLS for panel
-    "$XUI_BIN" setting -enableTLS true
+    # TLS is already configured by the 3X-UI installer (acme.sh)
 
     # Restart to apply
     x-ui restart
@@ -53,12 +68,12 @@ configure_3xui_subscription() {
 
     log_info "Configuring subscription service..."
 
-    # 3X-UI has built-in subscription support
-    # Configure via panel API or manual settings
-    "$XUI_BIN" setting -subEnable true
-    "$XUI_BIN" setting -subPort "$sub_port"
-    "$XUI_BIN" setting -subPath "/$sub_path/"
-    "$XUI_BIN" setting -subDomain "$domain"
+    # Subscription settings are not available via CLI flags,
+    # configure directly in the x-ui SQLite database
+    xui_db_set "subEnable" "true"
+    xui_db_set "subPort" "$sub_port"
+    xui_db_set "subPath" "/$sub_path/"
+    xui_db_set "subDomain" "$domain"
 
     x-ui restart
 

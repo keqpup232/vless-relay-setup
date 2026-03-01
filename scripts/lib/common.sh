@@ -64,7 +64,7 @@ generate_random_path() {
 install_dependencies() {
     log_info "Installing dependencies..."
     apt-get update -qq
-    apt-get install -y -qq curl wget unzip jq openssl cron socat git > /dev/null 2>&1
+    apt-get install -y -qq curl wget unzip jq openssl cron socat git sqlite3 > /dev/null 2>&1
     log_ok "Dependencies installed"
 }
 
