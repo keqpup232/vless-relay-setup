@@ -8,10 +8,10 @@
 ┌─────────────┐        ┌─────────────────────┐        ┌─────────────────────┐       ┌──────────┐
 │ Пользователь│        │   Relay-сервер (RU) │        │   Exit-сервер (NL)  │       │ Интернет │
 │  (клиент)   │────────│                     │────────│                     │───────│          │
-│             │ VLESS  │  XRAY inbound       │ VLESS  │  XRAY inbound       │       │          │
-│  v2rayNG /  │ Reality│  ↓                  │ Reality│  ↓                  │ HTTP/ │  google  │
-│  Streisand  │  TCP   │  XRAY outbound ─────│─XHTTP──│  XRAY outbound ─────│──TLS──│  youtube │
-│             │  :443  │  3X-UI панель       │  :443  │  3X-UI панель       │       │  ...     │
+│             │ VLESS  │  3X-UI xray         │ VLESS  │  XRAY inbound       │       │          │
+│  v2rayNG /  │ Reality│  inbound :443       │ Reality│  ↓                  │ HTTP/ │  google  │
+│  Streisand  │  TCP   │  ↓                  │ XHTTP  │  XRAY outbound ─────│──TLS──│  youtube │
+│             │  :443  │  outbound → exit ───│──:443──│                     │       │  ...     │
 └─────────────┘        └─────────────────────┘        └─────────────────────┘       └──────────┘
     Телефон/ПК          Москва / Россия              Амстердам / Нидерланды
 ```
@@ -119,14 +119,26 @@ Admin password:                    ← введите пароль
 Your domain for subscriptions:     ← vpn.example.com
 ```
 
-Скрипт настроит всё автоматически и выведет:
+Скрипт автоматически:
+- Установит XRAY-core и сгенерирует Reality-ключи для relay
+- Установит и настроит 3X-UI панель
+- Настроит подписки на отдельном порту (панель + 1)
+- Выпустит SSL-сертификат для домена
+- Создаст VLESS Reality inbound (порт 443) с маршрутизацией на exit-сервер
+- Создаст пользователя по умолчанию с подпиской
+- Настроит файрвол и fail2ban
+
+В конце выведет:
 
 ```
 3X-UI Panel:
   https://91.x.x.x:41532/xK9m.../
 
-Subscription URL:
-  https://vpn.example.com:41532/aB3d.../
+Subscription base URL:
+  https://vpn.example.com:41533/aB3d.../
+
+Default user subscription:
+  https://vpn.example.com:41533/aB3d.../f0e1d2c3b4a59687
 
 IMPORTANT: Set DNS A-record for vpn.example.com → 91.x.x.x
 ```
@@ -139,95 +151,19 @@ IMPORTANT: Set DNS A-record for vpn.example.com → 91.x.x.x
 vpn.example.com → 91.x.x.x  (IP вашего relay-сервера)
 ```
 
-### Шаг 4. Настройка 3X-UI для управления пользователями
+### Шаг 4. Добавление пользователей
 
-После установки на relay-сервере работают **два Xray**:
-- **Системный Xray** (порт 443) — VPN-туннель с одним пользователем
-- **3X-UI Xray** — отдельный процесс для управления через панель
+Откройте панель relay-сервера: `https://<relay-ip>:<port>/<path>/`
 
-Чтобы управлять пользователями через панель, нужно перенести конфигурацию в 3X-UI:
-
-#### 4.1. Остановить системный Xray
-
-```bash
-ssh <relay-сервер>
-systemctl stop xray
-systemctl disable xray
-```
-
-#### 4.2. Настроить outbound в 3X-UI
-
-1. Откройте панель: `https://<relay-ip>:<port>/<path>/`
-2. Перейдите в **Xray Configs** → **Outbounds**
-3. Нажмите **Add Outbound** и вставьте JSON:
-
-```json
-{
-  "tag": "proxy-exit",
-  "protocol": "vless",
-  "settings": {
-    "vnext": [{
-      "address": "<exit-server-ip>",
-      "port": 443,
-      "users": [{
-        "id": "<exit-uuid>",
-        "encryption": "none"
-      }]
-    }]
-  },
-  "streamSettings": {
-    "network": "xhttp",
-    "xhttpSettings": {
-      "mode": "auto",
-      "path": "/<exit-xhttp-path>"
-    },
-    "security": "reality",
-    "realitySettings": {
-      "fingerprint": "chrome",
-      "serverName": "<exit-sni>",
-      "publicKey": "<exit-public-key>",
-      "shortId": "<exit-short-id>"
-    }
-  }
-}
-```
-
-Подставьте значения из `exit-server-info.txt`.
-
-4. Перейдите в **Xray Configs** → **Routing Rules**
-5. Добавьте правило: Inbound Tag = `*` → Outbound Tag = `proxy-exit`
-
-#### 4.3. Создать inbound для пользователей
-
-1. Перейдите в **Inbounds** → **Add Inbound**
-2. Заполните поля:
-
-| Поле | Значение |
-|------|----------|
-| Remark | Любое имя (например `vless-reality`) |
-| Protocol | `vless` |
-| Port | `443` |
-| Flow | `xtls-rprx-vision` |
-| Security | `reality` |
-| SNI (dest) | Сайт маскировки relay (например `www.microsoft.com`) |
-| Private Key | Приватный ключ relay-сервера (из установки) |
-| Short ID | Short ID relay-сервера (из установки) |
-
-> **Где взять ключи relay-сервера?** Они были сгенерированы при установке. Посмотреть можно в конфиге: `cat /usr/local/etc/xray/config.json`
-
-3. Нажмите **Create**
-
-#### 4.4. Добавить пользователей
-
-1. В списке Inbounds найдите созданный `vless-reality`
-2. Нажмите **+** (Add Client)
-3. Укажите email (имя пользователя) и лимиты трафика/срока
-4. Нажмите **Add Client**
-5. Нажмите на иконку QR-кода или ссылки — скопируйте для пользователя
+1. **Inbounds** → найдите **VLESS Reality Relay** → нажмите **+ Add Client**
+2. Укажите email (имя пользователя), лимиты трафика и срок действия
+3. Нажмите **Add Client**
+4. Скопируйте subscription-ссылку для пользователя:
+   `https://vpn.example.com:<sub-port>/<sub-path>/<subId>`
 
 ### Шаг 5. Настройка клиента
 
-Передайте пользователю ссылку подключения или subscription-ссылку. Он вставляет её в приложение — и VPN работает.
+Передайте пользователю subscription-ссылку. Он вставляет её в приложение — и VPN работает.
 
 | Платформа | Приложение | Где скачать |
 |-----------|-----------|------------|
@@ -259,20 +195,20 @@ scripts/
 
 Через 3X-UI панель на relay-сервере: `https://<relay-ip>:<port>/<path>/`
 
-1. **Inbounds** → найдите `vless-reality` → нажмите **+** (Add Client)
+1. **Inbounds** → найдите **VLESS Reality Relay** → нажмите **+ Add Client**
 2. Укажите email (имя), лимиты трафика и срок действия
-3. Скопируйте ссылку подключения или QR-код для пользователя
+3. Скопируйте subscription-ссылку для пользователя
 
 Для удаления: нажмите **×** рядом с клиентом.
 
 ### Перезапуск сервисов
 
 ```bash
-# XRAY
+# Exit-сервер — XRAY (системный)
 systemctl restart xray
 systemctl status xray
 
-# 3X-UI
+# Relay-сервер — 3X-UI (управляет своим xray-процессом)
 x-ui restart
 x-ui status
 ```
@@ -280,37 +216,29 @@ x-ui status
 ### Просмотр логов
 
 ```bash
-# XRAY
+# Exit-сервер
 journalctl -u xray -f
-tail -f /var/log/xray/access.log
 
-# 3X-UI
+# Relay-сервер
 x-ui log
+tail -f /var/log/xray/access.log
 ```
 
 ### Обновление компонентов
 
 ```bash
-# XRAY
+# XRAY (exit-сервер)
 bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 
-# 3X-UI
+# 3X-UI (relay-сервер)
 x-ui update
 ```
 
 ## Переезд на новый сервер
 
-1. На старом сервере скопируйте `/root/exit-server-info.txt` (ключи и UUID)
+1. На старом exit-сервере скопируйте `/root/exit-server-info.txt` (ключи и UUID)
 2. Разверните новый сервер по инструкции выше
 3. При настройке используйте те же UUID и ключи — клиенты продолжат работать без перенастройки
-
-## Масштабирование
-
-Для добавления exit-серверов в других странах:
-
-1. Разверните новый exit-сервер: `sudo ./scripts/setup.sh exit`
-2. На relay-сервере добавьте новый outbound в конфигурацию XRAY (`/usr/local/etc/xray/config.json`)
-3. Настройте routing rules для балансировки или выбора страны
 
 ## Безопасность
 
@@ -318,19 +246,22 @@ x-ui update
 |-----------|--------------|
 | SSH | Только ключевая аутентификация, пароли отключены |
 | fail2ban | Блокировка IP после 3 неудачных попыток на 1 час |
-| UFW | Открыты только нужные порты: SSH, XRAY (443), панель |
+| UFW | Открыты только нужные порты: SSH, XRAY (443), панель, подписки |
 | 3X-UI | Доступ по случайному порту + секретному URL-пути |
 | Reality | Трафик неотличим от обычного TLS (маскировка под легитимный сайт) |
+| SSL | Автоматический сертификат Let's Encrypt для домена подписок |
 
 ## Устранение неполадок
 
 **Не могу подключиться к VPN:**
 ```bash
-# Проверить что XRAY запущен
+# Exit-сервер: проверить что XRAY запущен
 systemctl status xray
-
-# Посмотреть логи ошибок
 journalctl -u xray --no-pager -n 50
+
+# Relay-сервер: проверить 3X-UI и его xray
+x-ui status
+x-ui log
 ```
 
 **Не открывается панель 3X-UI:**
@@ -346,4 +277,13 @@ ufw status
 ```bash
 # Данные сохранены на exit-сервере
 cat /root/exit-server-info.txt
+```
+
+**HTTP 500 при добавлении клиента:**
+
+Если после ручного `x-ui restart` перестали добавляться клиенты, нужно переписать xray-шаблон в БД (3X-UI может стрипнуть `api`/`stats`/`policy` из шаблона при первом старте):
+```bash
+# Проверить наличие api в шаблоне
+sqlite3 /etc/x-ui/x-ui.db "SELECT value FROM settings WHERE key='xrayTemplateConfig';" | jq '.api'
+# Если null — нужно переустановить relay или вручную добавить api/stats/policy в шаблон
 ```
