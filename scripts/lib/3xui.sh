@@ -1,7 +1,7 @@
 #!/bin/bash
 # 3X-UI panel installation and configuration
 
-source "$(dirname "$0")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 install_3xui() {
     log_info "Installing 3X-UI panel..."

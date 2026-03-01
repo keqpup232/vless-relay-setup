@@ -1,7 +1,7 @@
 #!/bin/bash
 # Reality dest site discovery and key generation
 
-source "$(dirname "$0")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 generate_reality_keypair() {
     log_info "Generating x25519 key pair for Reality..."

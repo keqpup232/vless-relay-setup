@@ -1,7 +1,7 @@
 #!/bin/bash
 # Server security hardening
 
-source "$(dirname "$0")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 setup_ssh_hardening() {
     log_info "Hardening SSH..."

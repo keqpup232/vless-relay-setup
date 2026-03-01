@@ -1,7 +1,7 @@
 #!/bin/bash
 # XRAY-core installation and configuration
 
-source "$(dirname "$0")/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 install_xray() {
     log_info "Installing XRAY-core..."
