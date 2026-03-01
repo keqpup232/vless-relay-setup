@@ -9,7 +9,15 @@ XUI_DB="/etc/x-ui/x-ui.db"
 install_3xui() {
     log_info "Installing 3X-UI panel..."
 
-    bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) <<< "y"
+    # Open port 80 temporarily — the installer uses it for Let's Encrypt SSL cert
+    ufw allow 80/tcp comment "ACME temp" > /dev/null 2>&1 || true
+
+    # The installer asks interactive questions (confirm, port, SSL method, etc.)
+    # Feed "y" to confirm and empty lines for remaining prompts (accepts defaults)
+    yes "" | bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
+
+    # Close temporary port 80
+    ufw delete allow 80/tcp > /dev/null 2>&1 || true
 
     if command -v x-ui &> /dev/null; then
         log_ok "3X-UI installed"
