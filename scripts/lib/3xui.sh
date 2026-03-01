@@ -83,6 +83,10 @@ configure_3xui_relay_template() {
 
     log_info "Writing xray template config to 3X-UI database..."
 
+    # Pick a random port for the API tunnel (3X-UI gRPC ↔ xray)
+    local api_port
+    api_port=$(shuf -i 10000-60000 -n1)
+
     local template
     template=$(jq -n -c \
         --arg exit_ip "$exit_ip" \
@@ -92,11 +96,35 @@ configure_3xui_relay_template() {
         --arg exit_short_id "$exit_short_id" \
         --arg exit_sni "$exit_sni" \
         --arg exit_xhttp_path "$exit_xhttp_path" \
+        --argjson api_port "$api_port" \
         '{
             log: {
                 loglevel: "warning",
                 access: "/var/log/xray/access.log",
                 error: "/var/log/xray/error.log"
+            },
+            api: {
+                services: ["HandlerService", "LoggerService", "StatsService"],
+                tag: "api"
+            },
+            inbounds: [
+                {
+                    tag: "api",
+                    listen: "127.0.0.1",
+                    port: $api_port,
+                    protocol: "dokodemo-door",
+                    settings: { address: "127.0.0.1" }
+                }
+            ],
+            stats: {},
+            policy: {
+                levels: {"0": {statsUserUplink: true, statsUserDownlink: true}},
+                system: {
+                    statsInboundUplink: true,
+                    statsInboundDownlink: true,
+                    statsOutboundUplink: true,
+                    statsOutboundDownlink: true
+                }
             },
             outbounds: [
                 {
@@ -138,11 +166,18 @@ configure_3xui_relay_template() {
                 }
             ],
             routing: {
-                rules: [{
-                    type: "field",
-                    inboundTag: ["inbound-443"],
-                    outboundTag: "proxy-exit"
-                }]
+                rules: [
+                    {
+                        type: "field",
+                        inboundTag: ["api"],
+                        outboundTag: "api"
+                    },
+                    {
+                        type: "field",
+                        inboundTag: ["inbound-443"],
+                        outboundTag: "proxy-exit"
+                    }
+                ]
             }
         }')
 
@@ -152,7 +187,7 @@ configure_3xui_relay_template() {
     local escaped="${template//\'/\'\'}"
     xui_db_set "xrayTemplateConfig" "$escaped"
 
-    log_ok "Xray relay template written to 3X-UI database"
+    log_ok "Xray relay template written to 3X-UI database (API port: $api_port)"
 }
 
 create_3xui_relay_inbound() {
@@ -165,10 +200,12 @@ create_3xui_relay_inbound() {
 
     log_info "Creating VLESS Reality relay inbound in 3X-UI database..."
 
-    local settings stream_settings sniffing
+    local sub_id settings stream_settings sniffing
+    sub_id="${7:-$(head -c 8 /dev/urandom | xxd -p)}"
 
     settings=$(jq -n -c \
         --arg uuid "$relay_uuid" \
+        --arg sub_id "$sub_id" \
         '{
             clients: [{
                 id: $uuid,
@@ -177,12 +214,17 @@ create_3xui_relay_inbound() {
                 limitIp: 0,
                 totalGB: 0,
                 expiryTime: 0,
-                enable: true
+                enable: true,
+                subId: $sub_id,
+                tgId: "",
+                reset: 0
             }],
             decryption: "none",
             fallbacks: []
         }')
 
+    # 3X-UI subscription generator reads publicKey and fingerprint
+    # from realitySettings.settings (nested), not from the top level.
     stream_settings=$(jq -n -c \
         --arg private_key "$private_key" \
         --arg public_key "$public_key" \
@@ -199,7 +241,12 @@ create_3xui_relay_inbound() {
                 serverNames: [$server_name],
                 privateKey: $private_key,
                 publicKey: $public_key,
-                shortIds: [$short_id]
+                shortIds: [$short_id],
+                settings: {
+                    publicKey: $public_key,
+                    fingerprint: "chrome",
+                    spiderX: ""
+                }
             },
             tcpSettings: {
                 acceptProxyProtocol: false,
@@ -228,6 +275,7 @@ create_3xui_relay_inbound() {
     );"
 
     log_ok "VLESS Reality relay inbound created (port 443, tag inbound-443)"
+    log_info "  Default client subId: $sub_id"
 }
 
 configure_3xui_subscription() {
@@ -248,4 +296,43 @@ configure_3xui_subscription() {
 
     log_ok "Subscription configured:"
     log_info "  URL: https://${domain}:${sub_port}/${sub_path}/"
+}
+
+issue_domain_cert() {
+    local domain="$1"
+
+    log_info "Issuing SSL certificate for ${domain}..."
+
+    # acme.sh is already installed by the 3X-UI installer
+    local acme="$HOME/.acme.sh/acme.sh"
+    if [[ ! -f "$acme" ]]; then
+        log_warn "acme.sh not found, skipping SSL cert (configure manually)"
+        return 1
+    fi
+
+    # Port 80 must be open for HTTP-01 validation
+    ufw allow 80/tcp comment "ACME validation" > /dev/null 2>&1 || true
+
+    if "$acme" --issue -d "$domain" --standalone --force; then
+        local cert_dir="/root/cert/domain"
+        mkdir -p "$cert_dir"
+        "$acme" --install-cert -d "$domain" \
+            --fullchain-file "$cert_dir/fullchain.pem" \
+            --key-file "$cert_dir/privkey.pem"
+
+        # Configure 3X-UI to use the domain cert for panel and subscription
+        xui_db_set "webCertFile" "$cert_dir/fullchain.pem"
+        xui_db_set "webKeyFile" "$cert_dir/privkey.pem"
+        xui_db_set "subCertFile" "$cert_dir/fullchain.pem"
+        xui_db_set "subKeyFile" "$cert_dir/privkey.pem"
+
+        log_ok "SSL certificate issued and configured for ${domain}"
+    else
+        log_warn "Failed to issue SSL cert for ${domain}"
+        log_warn "Ensure DNS A-record points to this server, then run:"
+        log_warn "  $acme --issue -d $domain --standalone --force"
+        return 1
+    fi
+
+    ufw delete allow 80/tcp > /dev/null 2>&1 || true
 }

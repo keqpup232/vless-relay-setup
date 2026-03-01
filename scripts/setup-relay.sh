@@ -73,11 +73,18 @@ main() {
     sub_path=$(generate_random_path)
     configure_3xui_subscription "$domain" "$sub_port" "$sub_path"
 
+    # Issue SSL cert for the domain (needed for panel and subscription HTTPS)
+    issue_domain_cert "$domain" || true
+
     # Configure 3X-UI xray to relay traffic through exit server
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
         "$exit_pubkey" "$exit_short_id" "$exit_sni" "$exit_xhttp_path"
+
+    local default_sub_id
+    default_sub_id=$(head -c 8 /dev/urandom | xxd -p)
     create_3xui_relay_inbound "$relay_uuid" "$REALITY_PRIVATE_KEY" \
-        "$REALITY_PUBLIC_KEY" "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME"
+        "$REALITY_PUBLIC_KEY" "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
+        "$default_sub_id"
 
     x-ui restart
     log_ok "3X-UI restarted with relay configuration"
@@ -98,16 +105,18 @@ main() {
     echo "3X-UI Panel:"
     echo "  https://${server_ip}:${panel_port}/${panel_path}/"
     echo ""
-    echo "Subscription URL:"
+    echo "Subscription base URL:"
     echo "  https://${domain}:${sub_port}/${sub_path}/"
+    echo ""
+    echo "Default user subscription:"
+    echo "  https://${domain}:${sub_port}/${sub_path}/${default_sub_id}"
     echo ""
     echo "IMPORTANT: Set DNS A-record for ${domain} → ${server_ip}"
     echo ""
     echo "Next steps:"
-    echo "  1. Point your domain to this server's IP"
-    echo "  2. Log into 3X-UI panel"
-    echo "  3. Add users: Inbounds → VLESS Reality Relay → + Add Client"
-    echo "  4. Share subscription link with your users"
+    echo "  1. Log into 3X-UI panel"
+    echo "  2. Add users: Inbounds → VLESS Reality Relay → + Add Client"
+    echo "  3. Share each user's subscription link"
 }
 
 main
