@@ -3,6 +3,8 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
+XUI_BIN="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/x-ui"
+
 install_3xui() {
     log_info "Installing 3X-UI panel..."
 
@@ -25,16 +27,16 @@ configure_3xui() {
     log_info "Configuring 3X-UI panel..."
 
     # Set panel port
-    /usr/local/x-ui/x-ui setting -port "$panel_port"
+    "$XUI_BIN" setting -port "$panel_port"
 
     # Set panel URL path
-    /usr/local/x-ui/x-ui setting -webBasePath "/$panel_path/"
+    "$XUI_BIN" setting -webBasePath "/$panel_path/"
 
     # Set admin credentials
-    /usr/local/x-ui/x-ui setting -username "$admin_user" -password "$admin_pass"
+    "$XUI_BIN" setting -username "$admin_user" -password "$admin_pass"
 
     # Enable self-signed TLS for panel
-    /usr/local/x-ui/x-ui setting -enableTLS true
+    "$XUI_BIN" setting -enableTLS true
 
     # Restart to apply
     x-ui restart
@@ -53,10 +55,10 @@ configure_3xui_subscription() {
 
     # 3X-UI has built-in subscription support
     # Configure via panel API or manual settings
-    /usr/local/x-ui/x-ui setting -subEnable true
-    /usr/local/x-ui/x-ui setting -subPort "$sub_port"
-    /usr/local/x-ui/x-ui setting -subPath "/$sub_path/"
-    /usr/local/x-ui/x-ui setting -subDomain "$domain"
+    "$XUI_BIN" setting -subEnable true
+    "$XUI_BIN" setting -subPort "$sub_port"
+    "$XUI_BIN" setting -subPath "/$sub_path/"
+    "$XUI_BIN" setting -subDomain "$domain"
 
     x-ui restart
 
