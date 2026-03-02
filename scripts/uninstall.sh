@@ -57,7 +57,7 @@ uninstall_xray() {
     log_info "Removing XRAY..."
 
     if command -v xray &>/dev/null || [[ -f /usr/local/bin/xray ]]; then
-        bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove 2>/dev/null || true
+        bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove < /dev/null 2>/dev/null || true
         log_ok "XRAY removed"
     else
         log_info "XRAY not found, skipping"
