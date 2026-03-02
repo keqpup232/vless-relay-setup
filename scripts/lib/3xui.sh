@@ -205,6 +205,15 @@ create_3xui_relay_inbound() {
 
     local sub_id settings stream_settings sniffing
     sub_id="${7:-$(head -c 8 /dev/urandom | xxd -p)}"
+    local exit_ip="${8:-}"
+
+    # Build inbound name from geo IP (fallback: "Relay → Exit")
+    local relay_city exit_city remark
+    relay_city=$(curl -s --max-time 3 "http://ip-api.com/json/?fields=city" | jq -r '.city // empty') || true
+    if [[ -n "$exit_ip" ]]; then
+        exit_city=$(curl -s --max-time 3 "http://ip-api.com/json/${exit_ip}?fields=city" | jq -r '.city // empty') || true
+    fi
+    remark="${relay_city:-Relay} → ${exit_city:-Exit}"
 
     settings=$(jq -n -c \
         --arg uuid "$relay_uuid" \
@@ -272,7 +281,7 @@ create_3xui_relay_inbound() {
         listen, port, protocol, settings, stream_settings,
         tag, sniffing
     ) VALUES (
-        1, 0, 0, 0, 'VLESS Reality Relay', 1, 0,
+        1, 0, 0, 0, '${remark//\'/\'\'}', 1, 0,
         '', 443, 'vless', '${s_settings}', '${s_stream}',
         'inbound-443', '${s_sniffing}'
     );"

@@ -93,7 +93,7 @@ main() {
     default_sub_id=$(head -c 8 /dev/urandom | xxd -p)
     create_3xui_relay_inbound "$relay_uuid" "$REALITY_PRIVATE_KEY" \
         "$REALITY_PUBLIC_KEY" "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
-        "$default_sub_id"
+        "$default_sub_id" "$exit_ip"
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
         "$exit_pubkey" "$exit_short_id" "$exit_sni" "$exit_xhttp_path"
@@ -147,7 +147,7 @@ main() {
     echo ""
     echo "Next steps:"
     echo "  1. Log into 3X-UI panel"
-    echo "  2. Add users: Inbounds → VLESS Reality Relay → + Add Client"
+    echo "  2. Add users: Inbounds → find your relay inbound → + Add Client"
     echo "  3. Share each user's subscription link"
 }
 
