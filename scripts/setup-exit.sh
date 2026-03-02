@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/reality.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
+source "$SCRIPT_DIR/lib/verify.sh"
 
 main() {
     echo "==========================================="
@@ -60,6 +61,9 @@ main() {
     # --- Step 5: Security ---
     log_info "=== Security Setup ==="
     setup_security 22:SSH 443:XRAY "$panel_port:3X-UI Panel"
+
+    # --- Step 6: Verify ---
+    verify_exit_server "$panel_port"
 
     # --- Done ---
     local server_ip

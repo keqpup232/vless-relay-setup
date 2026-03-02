@@ -344,6 +344,25 @@ issue_domain_cert() {
 
     log_info "Issuing SSL certificate for ${domain}..."
 
+    # Verify DNS resolves to this server before attempting ACME
+    local server_ip domain_ip
+    server_ip=$(curl -s4 --max-time 5 ifconfig.me 2>/dev/null) || server_ip=""
+    domain_ip=$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | head -1) || domain_ip=""
+
+    if [[ -z "$domain_ip" ]]; then
+        log_warn "DNS for ${domain} does not resolve yet"
+        log_warn "Set A-record: ${domain} → ${server_ip}"
+        log_warn "Then issue cert manually: ~/.acme.sh/acme.sh --issue -d $domain --standalone --force"
+        return 1
+    fi
+
+    if [[ -n "$server_ip" && "$domain_ip" != "$server_ip" ]]; then
+        log_warn "DNS for ${domain} resolves to ${domain_ip}, but this server is ${server_ip}"
+        log_warn "Fix the A-record, then issue cert manually:"
+        log_warn "  ~/.acme.sh/acme.sh --issue -d $domain --standalone --force"
+        return 1
+    fi
+
     # acme.sh is already installed by the 3X-UI installer
     local acme="$HOME/.acme.sh/acme.sh"
     if [[ ! -f "$acme" ]]; then

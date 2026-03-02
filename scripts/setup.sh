@@ -6,10 +6,11 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
 show_usage() {
-    echo "Usage: $0 [relay|exit]"
+    echo "Usage: $0 [relay|exit|uninstall]"
     echo ""
-    echo "  relay  — Setup Russian relay server (entry point for users)"
-    echo "  exit   — Setup foreign exit server (internet access point)"
+    echo "  exit      — Setup foreign exit server (internet access point)"
+    echo "  relay     — Setup Russian relay server (entry point for users)"
+    echo "  uninstall — Remove all VPN components (keeps SSH keys)"
     echo ""
     echo "Deploy EXIT server first, then RELAY server."
 }
@@ -20,6 +21,9 @@ case "${1:-}" in
         ;;
     exit)
         exec "$SCRIPT_DIR/setup-exit.sh"
+        ;;
+    uninstall)
+        exec "$SCRIPT_DIR/uninstall.sh" "${@:2}"
         ;;
     *)
         show_usage

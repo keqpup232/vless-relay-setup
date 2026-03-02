@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/lib/security.sh"
 source "$SCRIPT_DIR/lib/reality.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
+source "$SCRIPT_DIR/lib/verify.sh"
 
 main() {
     echo "==========================================="
@@ -33,6 +34,14 @@ main() {
     prompt_input "Exit server Reality SNI" exit_sni
     prompt_input "Exit server XHTTP path" exit_xhttp_path
 
+    # Validate exit server inputs
+    validate_ip "$exit_ip" || { log_error "Invalid IP address: $exit_ip"; exit 1; }
+    validate_uuid "$exit_uuid" || { log_error "Invalid UUID format: $exit_uuid"; exit 1; }
+    validate_not_empty "$exit_pubkey" "Exit public key" || exit 1
+    validate_not_empty "$exit_short_id" "Exit short ID" || exit 1
+    validate_not_empty "$exit_sni" "Exit SNI" || exit 1
+    validate_not_empty "$exit_xhttp_path" "Exit XHTTP path" || exit 1
+
     # --- Step 2: Relay configuration ---
     log_info "=== Relay Configuration ==="
 
@@ -44,7 +53,7 @@ main() {
     prompt_input "3X-UI panel secret path" panel_path "$panel_path"
     prompt_input "Admin username" admin_user "admin"
     prompt_password "Admin password" admin_pass
-    prompt_input "Your domain for subscriptions (e.g. vpn.example.com)" domain
+    prompt_input "Domain for subscriptions, optional, Enter to skip" domain ""
 
     # --- Step 3: System setup ---
     log_info "=== System Setup ==="
@@ -67,14 +76,16 @@ main() {
     install_3xui
     configure_3xui "$panel_port" "$panel_path" "$admin_user" "$admin_pass"
 
-    # Configure subscription (separate port to avoid bind conflict with panel)
-    local sub_port sub_path
-    sub_port=$((panel_port + 1))
-    sub_path=$(generate_random_path)
-    configure_3xui_subscription "$domain" "$sub_port" "$sub_path"
-
-    # Issue SSL cert for the domain (needed for panel and subscription HTTPS)
-    issue_domain_cert "$domain" || true
+    # Configure subscription (only if domain is provided)
+    local sub_port="" sub_path=""
+    if [[ -n "$domain" ]]; then
+        sub_port=$((panel_port + 1))
+        sub_path=$(generate_random_path)
+        configure_3xui_subscription "$domain" "$sub_port" "$sub_path"
+        issue_domain_cert "$domain" || true
+    else
+        log_info "No domain provided — skipping subscriptions and SSL cert"
+    fi
 
     # Create relay inbound FIRST, then restart so 3X-UI picks it up
     local default_sub_id
@@ -98,7 +109,14 @@ main() {
 
     # --- Step 6: Security ---
     log_info "=== Security Setup ==="
-    setup_security 22:SSH 443:XRAY "$panel_port:3X-UI Panel" "$sub_port:Subscription"
+    local ufw_args=("22:SSH" "443:XRAY" "$panel_port:3X-UI Panel")
+    if [[ -n "$sub_port" ]]; then
+        ufw_args+=("$sub_port:Subscription")
+    fi
+    setup_security "${ufw_args[@]}"
+
+    # --- Step 7: Verify ---
+    verify_relay_server "$panel_port" "$sub_port" "$exit_ip" "$exit_port"
 
     # --- Done ---
     local server_ip
@@ -112,13 +130,18 @@ main() {
     echo "3X-UI Panel:"
     echo "  https://${server_ip}:${panel_port}/${panel_path}/"
     echo ""
-    echo "Subscription base URL:"
-    echo "  https://${domain}:${sub_port}/${sub_path}/"
-    echo ""
-    echo "Default user subscription:"
-    echo "  https://${domain}:${sub_port}/${sub_path}/${default_sub_id}"
-    echo ""
-    echo "IMPORTANT: Set DNS A-record for ${domain} → ${server_ip}"
+    if [[ -n "$domain" ]]; then
+        echo "Subscription base URL:"
+        echo "  https://${domain}:${sub_port}/${sub_path}/"
+        echo ""
+        echo "Default user subscription:"
+        echo "  https://${domain}:${sub_port}/${sub_path}/${default_sub_id}"
+        echo ""
+        echo "IMPORTANT: Set DNS A-record for ${domain} → ${server_ip}"
+    else
+        echo "Subscriptions not configured (no domain provided)."
+        echo "To add later, re-run setup with a domain."
+    fi
     echo ""
     echo "Next steps:"
     echo "  1. Log into 3X-UI panel"

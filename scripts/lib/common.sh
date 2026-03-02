@@ -53,6 +53,25 @@ prompt_password() {
     printf -v "$var_name" '%s' "$input"
 }
 
+validate_ip() {
+    local ip="$1"
+    [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]
+}
+
+validate_uuid() {
+    local uuid="$1"
+    [[ "$uuid" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]
+}
+
+validate_not_empty() {
+    local value="$1"
+    local name="$2"
+    if [[ -z "$value" ]]; then
+        log_error "$name cannot be empty"
+        return 1
+    fi
+}
+
 generate_random_port() {
     shuf -i 10000-60000 -n 1
 }
