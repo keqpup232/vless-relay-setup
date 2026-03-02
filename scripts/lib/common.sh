@@ -48,9 +48,30 @@ prompt_password() {
     local prompt="$1"
     local var_name="$2"
     local input
-    read -srp "$prompt: " input
-    echo
+    while true; do
+        read -srp "$prompt: " input
+        echo
+        if [[ "$input" =~ [^[:ascii:]] ]]; then
+            log_warn "Password contains non-ASCII characters (wrong keyboard layout?)"
+            log_warn "Please try again with English layout"
+            continue
+        fi
+        if [[ -z "$input" ]]; then
+            log_warn "Password cannot be empty"
+            continue
+        fi
+        break
+    done
     printf -v "$var_name" '%s' "$input"
+}
+
+validate_ascii() {
+    local value="$1"
+    local name="$2"
+    if [[ "$value" =~ [^[:ascii:]] ]]; then
+        log_error "$name contains non-ASCII characters (check keyboard layout)"
+        return 1
+    fi
 }
 
 validate_ip() {

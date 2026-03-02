@@ -30,6 +30,7 @@ main() {
     prompt_input "3X-UI panel port" panel_port "$panel_port"
     prompt_input "3X-UI panel secret path" panel_path "$panel_path"
     prompt_input "Admin username" admin_user "admin"
+    validate_ascii "$admin_user" "Username" || exit 1
     prompt_password "Admin password" admin_pass
 
     # --- Step 2: System setup ---
