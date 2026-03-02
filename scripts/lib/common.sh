@@ -51,7 +51,7 @@ prompt_password() {
     while true; do
         read -srp "$prompt: " input
         echo
-        if [[ "$input" =~ [^[:ascii:]] ]]; then
+        if [[ ! "$input" =~ ^[\ -~]+$ ]]; then
             log_warn "Password contains non-ASCII characters (wrong keyboard layout?)"
             log_warn "Please try again with English layout"
             continue
@@ -68,8 +68,8 @@ prompt_password() {
 validate_ascii() {
     local value="$1"
     local name="$2"
-    if [[ "$value" =~ [^[:ascii:]] ]]; then
-        log_error "$name contains non-ASCII characters (check keyboard layout)"
+    if [[ ! "$value" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+        log_error "$name contains invalid characters (use English letters, digits, _ . -)"
         return 1
     fi
 }
