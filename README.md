@@ -1,6 +1,6 @@
-# VLESS Reality Relay VPN
+# Self-hosted Relay VPN
 
-Автоматическое развёртывание двухзвенной VPN-инфраструктуры на базе VLESS + XTLS-Reality с управлением через 3X-UI.
+Двухзвенный VPN с маскировкой трафика под обычный HTTPS (VLESS + XTLS-Reality). Автоматическая установка на два VPS-сервера.
 
 ## Как это работает
 
