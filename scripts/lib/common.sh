@@ -3,6 +3,10 @@
 
 set -euo pipefail
 
+# Project version (read from VERSION file in repo root)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+PROJECT_VERSION=$(cat "$REPO_ROOT/VERSION" 2>/dev/null || echo "unknown")
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'

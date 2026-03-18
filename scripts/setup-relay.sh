@@ -13,12 +13,21 @@ source "$SCRIPT_DIR/lib/verify.sh"
 main() {
     echo "==========================================="
     echo "  VLESS Reality VPN — RELAY Server Setup"
-    echo "  (Russia / Entry point)"
+    echo "  (Russia / Entry point)  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 
     check_root
     check_os
+
+    # Guard: prevent accidental re-setup on a configured server
+    if [[ -f /etc/x-ui/x-ui.db ]] && [[ "${1:-}" != "--force" ]]; then
+        log_warn "Existing 3X-UI database detected!"
+        log_warn "Running setup again will regenerate ALL keys and break client connections."
+        log_info "To update config from latest codebase: ./setup.sh update-relay"
+        log_info "To force full reinstall: ./setup.sh relay --force"
+        exit 1
+    fi
 
     # --- Step 1: Exit server details ---
     log_info "=== Exit Server Connection Details ==="
@@ -198,4 +207,6 @@ main() {
     echo ""
 }
 
-main
+LOG_FILE="/var/log/vpn-setup-$(basename "$0" .sh)-$(date +%Y%m%d-%H%M%S).log"
+main "$@" 2>&1 | tee "$LOG_FILE"
+exit "${PIPESTATUS[0]}"

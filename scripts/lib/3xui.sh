@@ -32,8 +32,8 @@ install_3xui() {
 
 # Set a key-value pair in x-ui settings database
 xui_db_set() {
-    local key="$1"
-    local value="$2"
+    local key="${1//\'/\'\'}"
+    local value="${2//\'/\'\'}"
 
     local exists
     exists=$(sqlite3 "$XUI_DB" "SELECT COUNT(*) FROM settings WHERE key='$key';")
@@ -154,6 +154,9 @@ configure_3xui_relay_template() {
                             serverName: $exit_sni,
                             publicKey: $exit_pubkey,
                             shortId: $exit_short_id
+                        },
+                        sockopt: {
+                            dialerProxy: "fragment"
                         }
                     }
                 },
@@ -164,6 +167,17 @@ configure_3xui_relay_template() {
                 {
                     tag: "block",
                     protocol: "blackhole"
+                },
+                {
+                    tag: "fragment",
+                    protocol: "freedom",
+                    settings: {
+                        fragment: {
+                            packets: "tlshello",
+                            length: "100-200",
+                            interval: "10-20"
+                        }
+                    }
                 }
             ],
             routing: {
@@ -184,9 +198,7 @@ configure_3xui_relay_template() {
 
     mkdir -p /var/log/xray
 
-    # Escape single quotes for SQLite
-    local escaped="${template//\'/\'\'}"
-    xui_db_set "xrayTemplateConfig" "$escaped"
+    xui_db_set "xrayTemplateConfig" "$template"
 
     log_ok "Xray relay template written to 3X-UI database (API port: $api_port)"
 }
@@ -266,7 +278,8 @@ create_3xui_relay_inbound() {
 
     sniffing=$(jq -n -c '{
         enabled: true,
-        destOverride: ["http","tls","quic"]
+        destOverride: ["http","tls","quic"],
+        routeOnly: true
     }')
 
     # Escape single quotes for SQLite

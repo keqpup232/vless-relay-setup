@@ -75,7 +75,8 @@ configure_xray_exit() {
             },
             "sniffing": {
                 "enabled": true,
-                "destOverride": ["http", "tls", "quic"]
+                "destOverride": ["http", "tls", "quic"],
+                "routeOnly": true
             }
         }
     ],
@@ -91,7 +92,16 @@ configure_xray_exit() {
             "tag": "block",
             "protocol": "blackhole"
         }
-    ]
+    ],
+    "routing": {
+        "rules": [
+            {
+                "type": "field",
+                "ip": ["geoip:private"],
+                "outboundTag": "block"
+            }
+        ]
+    }
 }
 XRAYEOF
 
@@ -112,8 +122,9 @@ restart_xray() {
 
     if systemctl is-active --quiet xray; then
         log_ok "XRAY is running"
+        return 0
     else
         log_error "XRAY failed to start. Check: journalctl -u xray"
-        exit 1
+        return 1
     fi
 }

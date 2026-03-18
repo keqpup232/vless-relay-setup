@@ -14,11 +14,21 @@ main() {
     echo "==========================================="
     echo "  VLESS Reality VPN — EXIT Server Setup"
     echo "  (Foreign server)"
+    echo "  (Netherlands / Foreign server)  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 
     check_root
     check_os
+
+    # Guard: prevent accidental re-setup on a configured server
+    if [[ -f /usr/local/etc/xray/config.json ]] && [[ "${1:-}" != "--force" ]]; then
+        log_warn "Existing XRAY configuration detected!"
+        log_warn "Running setup again will regenerate ALL keys and break the relay connection."
+        log_info "To update config from latest codebase: ./setup.sh update-exit"
+        log_info "To force full reinstall: ./setup.sh exit --force"
+        exit 1
+    fi
 
     # --- Step 1: Gather configuration ---
     log_info "=== Configuration ==="
@@ -113,4 +123,6 @@ EOF
     echo ""
 }
 
-main
+LOG_FILE="/var/log/vpn-setup-$(basename "$0" .sh)-$(date +%Y%m%d-%H%M%S).log"
+main "$@" 2>&1 | tee "$LOG_FILE"
+exit "${PIPESTATUS[0]}"

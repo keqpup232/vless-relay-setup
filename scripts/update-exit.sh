@@ -18,7 +18,7 @@ main() {
     fi
 
     echo "==========================================="
-    echo "  VLESS Reality VPN — EXIT Server Update"
+    echo "  VLESS Reality VPN — EXIT Server Update  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 
@@ -93,13 +93,20 @@ main() {
 
     # --- Step 5: Update XRAY config ---
     log_info "=== Updating XRAY Config ==="
-    cp "$XRAY_CONFIG" "${XRAY_CONFIG}.bak"
-    log_ok "Backup saved: ${XRAY_CONFIG}.bak"
+    local backup_path="${XRAY_CONFIG}.bak.$(date +%Y%m%d-%H%M%S)"
+    cp "$XRAY_CONFIG" "$backup_path"
+    log_ok "Backup saved: $backup_path"
 
     configure_xray_exit "$listen_port" "$uuid" "$private_key" \
         "$short_id" "$dest" "$server_name" "$xhttp_path"
 
-    restart_xray
+    if ! restart_xray; then
+        log_warn "Restoring previous config..."
+        cp "$backup_path" "$XRAY_CONFIG"
+        restart_xray || { log_error "Rollback also failed"; exit 1; }
+        log_ok "Previous config restored, XRAY is running"
+        exit 1
+    fi
 
     # --- Step 6: Security ---
     log_info "=== Security ==="
@@ -141,4 +148,6 @@ EOF
     echo ""
 }
 
-main "$@"
+LOG_FILE="/var/log/vpn-setup-$(basename "$0" .sh)-$(date +%Y%m%d-%H%M%S).log"
+main "$@" 2>&1 | tee "$LOG_FILE"
+exit "${PIPESTATUS[0]}"
