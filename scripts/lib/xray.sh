@@ -75,7 +75,8 @@ configure_xray_exit() {
             },
             "sniffing": {
                 "enabled": true,
-                "destOverride": ["http", "tls", "quic"]
+                "destOverride": ["http", "tls", "quic"],
+                "routeOnly": true
             }
         }
     ],
@@ -91,7 +92,16 @@ configure_xray_exit() {
             "tag": "block",
             "protocol": "blackhole"
         }
-    ]
+    ],
+    "routing": {
+        "rules": [
+            {
+                "type": "field",
+                "ip": ["geoip:private"],
+                "outboundTag": "block"
+            }
+        ]
+    }
 }
 XRAYEOF
 
