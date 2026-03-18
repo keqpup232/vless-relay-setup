@@ -9,7 +9,9 @@ show_usage() {
     echo "Usage: $0 [exit|relay|update-exit|update-relay|uninstall]"
     echo ""
     echo "  exit         — Setup foreign exit server (internet access point)"
+    echo "                 Use --force to reinstall even if already configured"
     echo "  relay        — Setup Russian relay server (entry point for users)"
+    echo "                 Use --force to reinstall even if already configured"
     echo "  update-exit  — Update exit server config from latest codebase"
     echo "                 Use --upgrade to also update XRAY and 3X-UI binaries"
     echo "  update-relay — Update relay server config from latest codebase"
@@ -22,10 +24,10 @@ show_usage() {
 
 case "${1:-}" in
     relay)
-        exec "$SCRIPT_DIR/setup-relay.sh"
+        exec "$SCRIPT_DIR/setup-relay.sh" "${@:2}"
         ;;
     exit)
-        exec "$SCRIPT_DIR/setup-exit.sh"
+        exec "$SCRIPT_DIR/setup-exit.sh" "${@:2}"
         ;;
     update-exit)
         exec "$SCRIPT_DIR/update-exit.sh" "${@:2}"

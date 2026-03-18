@@ -20,6 +20,15 @@ main() {
     check_root
     check_os
 
+    # Guard: prevent accidental re-setup on a configured server
+    if [[ -f /usr/local/etc/xray/config.json ]] && [[ "${1:-}" != "--force" ]]; then
+        log_warn "Existing XRAY configuration detected!"
+        log_warn "Running setup again will regenerate ALL keys and break the relay connection."
+        log_info "To update config from latest codebase: ./setup.sh update-exit"
+        log_info "To force full reinstall: ./setup.sh exit --force"
+        exit 1
+    fi
+
     # --- Step 1: Gather configuration ---
     log_info "=== Configuration ==="
 
@@ -113,4 +122,4 @@ EOF
     echo ""
 }
 
-main
+main "$@"

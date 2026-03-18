@@ -20,6 +20,15 @@ main() {
     check_root
     check_os
 
+    # Guard: prevent accidental re-setup on a configured server
+    if [[ -f /etc/x-ui/x-ui.db ]] && [[ "${1:-}" != "--force" ]]; then
+        log_warn "Existing 3X-UI database detected!"
+        log_warn "Running setup again will regenerate ALL keys and break client connections."
+        log_info "To update config from latest codebase: ./setup.sh update-relay"
+        log_info "To force full reinstall: ./setup.sh relay --force"
+        exit 1
+    fi
+
     # --- Step 1: Exit server details ---
     log_info "=== Exit Server Connection Details ==="
     echo "Enter the values from exit server setup:"
@@ -157,4 +166,4 @@ main() {
     echo ""
 }
 
-main
+main "$@"
