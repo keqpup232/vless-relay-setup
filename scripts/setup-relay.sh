@@ -67,6 +67,8 @@ main() {
     while true; do
         prompt_input "Domain for subscriptions and traffic, optional like vpn.yourdomain.ru, Enter to skip" domain ""
         if [[ -z "$domain" ]]; then
+            local reality_choice
+            reality_choice=1
             log_info "No domain provided, skipping subscription setup"
             break
         fi
@@ -82,6 +84,7 @@ main() {
 
     # --- Reality domain selection ---
     log_info "=== Reality SNI Configuration ==="
+
     if [[ -z "$domain" ]]; then
         echo "  Note: No domain configured."
     else
