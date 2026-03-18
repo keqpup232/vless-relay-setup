@@ -32,8 +32,8 @@ install_3xui() {
 
 # Set a key-value pair in x-ui settings database
 xui_db_set() {
-    local key="$1"
-    local value="$2"
+    local key="${1//\'/\'\'}"
+    local value="${2//\'/\'\'}"
 
     local exists
     exists=$(sqlite3 "$XUI_DB" "SELECT COUNT(*) FROM settings WHERE key='$key';")
@@ -198,9 +198,7 @@ configure_3xui_relay_template() {
 
     mkdir -p /var/log/xray
 
-    # Escape single quotes for SQLite
-    local escaped="${template//\'/\'\'}"
-    xui_db_set "xrayTemplateConfig" "$escaped"
+    xui_db_set "xrayTemplateConfig" "$template"
 
     log_ok "Xray relay template written to 3X-UI database (API port: $api_port)"
 }
