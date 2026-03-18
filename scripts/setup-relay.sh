@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/lib/verify.sh"
 main() {
     echo "==========================================="
     echo "  VLESS Reality VPN — RELAY Server Setup"
-    echo "  (Russia / Entry point)"
+    echo "  (Russia / Entry point)  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 

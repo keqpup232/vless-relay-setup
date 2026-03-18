@@ -128,7 +128,7 @@ cleanup_files() {
 
 main() {
     echo "==========================================="
-    echo "  VLESS Reality VPN — Uninstall"
+    echo "  VLESS Reality VPN — Uninstall  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 

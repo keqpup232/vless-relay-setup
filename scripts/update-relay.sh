@@ -15,7 +15,7 @@ main() {
     fi
 
     echo "==========================================="
-    echo "  VLESS Reality VPN — RELAY Server Update"
+    echo "  VLESS Reality VPN — RELAY Server Update  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 

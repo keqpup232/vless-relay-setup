@@ -18,7 +18,7 @@ main() {
     fi
 
     echo "==========================================="
-    echo "  VLESS Reality VPN — EXIT Server Update"
+    echo "  VLESS Reality VPN — EXIT Server Update  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 

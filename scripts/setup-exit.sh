@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/lib/verify.sh"
 main() {
     echo "==========================================="
     echo "  VLESS Reality VPN — EXIT Server Setup"
-    echo "  (Netherlands / Foreign server)"
+    echo "  (Netherlands / Foreign server)  v${PROJECT_VERSION}"
     echo "==========================================="
     echo ""
 
