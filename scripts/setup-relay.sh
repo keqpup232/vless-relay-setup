@@ -54,7 +54,37 @@ main() {
     prompt_input "Admin username" admin_user "admin"
     validate_ascii "$admin_user" "Username" || exit 1
     prompt_password "Admin password" admin_pass
-    prompt_input "Domain for subscriptions, optional, Enter to skip" domain ""
+
+    while true; do
+        prompt_input "Domain for subscriptions and traffic, optional like vpn.yourdomain.ru, Enter to skip" domain ""
+        if [[ -z "$domain" ]]; then
+            log_info "No domain provided, skipping subscription setup"
+            break
+        fi
+        if validate_domain "$domain"; then
+            log_ok "Domain validated: $domain"
+            break
+        else
+            log_error "Invalid domain format: $domain"
+            echo "  Domain should be like: vpn.yourdomain.ru or sub.example.com"
+            echo "  Press Enter to skip or enter correct domain"
+        fi
+    done
+
+    # --- Reality domain selection ---
+    log_info "=== Reality SNI Configuration ==="
+    if [[ -z "$domain" ]]; then
+        echo "  Note: No domain configured."
+    else
+          echo "Choose Reality SNI for incoming connections (what DPI will see):"
+          echo "  1) Use popular global domain (better anonymity, e.g., microsoft.com)"
+          echo "  2) Use your own domain (more legitimate if you own it)"
+          validate_choice "Select option" "1" reality_choice 1 2
+          if [[ "$reality_choice" == "2" ]]; then
+              log_ok "Domain validated: $domain"
+          else
+              log_info "Will auto-select best global domain for Reality SNI"
+          fi
 
     # --- Step 3: System setup ---
     log_info "=== System Setup ==="
@@ -64,7 +94,18 @@ main() {
     # --- Step 4: Install XRAY (for key generation only) ---
     log_info "=== XRAY Setup ==="
     install_xray
-    setup_reality  # Generate local Reality keys and dest
+
+    # setup_reality_choice - Generate Reality keys and configure SNI
+    if [[ "$reality_choice" == "2" ]]; then
+        log_info "Using custom domain for Reality SNI: $domain"
+        export REALITY_DEST="$domain"
+        export REALITY_SERVER_NAME="$domain"
+        log_ok "Reality dest: $REALITY_DEST"
+        generate_reality_keypair
+        generate_short_id
+    else
+        setup_reality  # Original function - finds best global site
+    fi
 
     local relay_uuid
     relay_uuid=$(xray uuid)

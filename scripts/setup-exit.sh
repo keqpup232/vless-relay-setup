@@ -1,5 +1,5 @@
 #!/bin/bash
-# Exit server setup (Netherlands)
+# Exit server setup
 # Run: ./setup.sh exit
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -13,7 +13,7 @@ source "$SCRIPT_DIR/lib/verify.sh"
 main() {
     echo "==========================================="
     echo "  VLESS Reality VPN — EXIT Server Setup"
-    echo "  (Netherlands / Foreign server)"
+    echo "  (Foreign server)"
     echo "==========================================="
     echo ""
 
