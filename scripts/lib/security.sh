@@ -19,7 +19,12 @@ setup_ssh_hardening() {
     sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' "$ssh_config"
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' "$ssh_config"
 
-    systemctl restart sshd
+    # Service is named "ssh" on Debian/Ubuntu, "sshd" on RHEL/Fedora
+    local sshd_service="sshd"
+    if systemctl list-unit-files ssh.service &>/dev/null; then
+        sshd_service="ssh"
+    fi
+    systemctl restart "$sshd_service"
     log_ok "SSH hardened: password auth disabled, key-only access"
 }
 
