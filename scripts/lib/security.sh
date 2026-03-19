@@ -73,8 +73,18 @@ JAIL
 }
 
 setup_security() {
-    # Usage: setup_security port:label [port:label ...]
-    setup_ssh_hardening
+    # Usage: setup_security [--skip-ssh] port:label [port:label ...]
+    local skip_ssh=false
+    if [[ "${1:-}" == "--skip-ssh" ]]; then
+        skip_ssh=true
+        shift
+    fi
+
+    if [[ "$skip_ssh" == true ]]; then
+        log_info "Skipping SSH hardening (--skip-ssh)"
+    else
+        setup_ssh_hardening
+    fi
     setup_fail2ban
     setup_ufw "$@"
 }
