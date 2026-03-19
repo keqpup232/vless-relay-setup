@@ -45,6 +45,21 @@ xui_db_set() {
     fi
 }
 
+build_domain_json_from_file() {
+    local file="$1"
+
+    if [[ ! -f "$file" ]]; then
+        echo '[]'
+        return 0
+    fi
+
+    jq -Rsc '
+      split("\n")
+      | map(gsub("\r"; ""))
+      | map(select(. != "" and (startswith("#") | not)))
+    ' "$file"
+}
+
 configure_3xui() {
     local panel_port="$1"
     local panel_path="$2"
@@ -83,10 +98,88 @@ configure_3xui_relay_template() {
     local exit_short_id="$5"
     local exit_sni="$6"
     local exit_xhttp_path="$7"
+    local enable_split_routing="${8:-n}"
+    local enable_ru_direct="${9:-y}"
+    local api_port="${10:-$(shuf -i 10000-60000 -n1)}"
 
-    local api_port="${8:-$(shuf -i 10000-60000 -n1)}"
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local direct_file="$script_dir/../direct-domains.txt"
+    local proxy_file="$script_dir/../proxy-domains.txt"
 
     log_info "Writing xray template config to 3X-UI database..."
+
+    local direct_json='[]'
+    local proxy_json='[]'
+
+    if [[ "${enable_split_routing,,}" == "y" ]]; then
+        direct_json=$(build_domain_json_from_file "$direct_file")
+        proxy_json=$(build_domain_json_from_file "$proxy_file")
+    fi
+
+    local routing_rules='[]'
+
+    routing_rules=$(jq -n -c '
+        [
+          {
+            type: "field",
+            inboundTag: ["api"],
+            outboundTag: "api"
+          },
+          {
+            type: "field",
+            ip: ["geoip:private"],
+            outboundTag: "direct"
+          }
+        ]')
+
+    if [[ "${enable_split_routing,,}" == "y" ]]; then
+        routing_rules=$(jq -n -c \
+            --argjson rules "$routing_rules" \
+            --argjson direct "$direct_json" \
+            '$rules + [
+              {
+                type: "field",
+                domain: $direct,
+                outboundTag: "direct"
+              }
+            ]')
+    fi
+
+    if [[ "${enable_split_routing,,}" == "y" ]]; then
+        routing_rules=$(jq -n -c \
+            --argjson rules "$routing_rules" \
+            --argjson proxy "$proxy_json" \
+            '$rules + [
+              {
+                type: "field",
+                domain: $proxy,
+                outboundTag: "proxy-exit"
+              }
+            ]')
+    fi
+
+    if [[ "${enable_ru_direct,,}" == "y" ]]; then
+        routing_rules=$(jq -n -c \
+            --argjson rules "$routing_rules" \
+            '$rules + [
+              {
+                type: "field",
+                domain: ["regexp:\\.ru$"],
+                outboundTag: "direct"
+              }
+            ]')
+    fi
+
+    routing_rules=$(jq -n -c \
+        --argjson rules "$routing_rules" \
+        '$rules + [
+          {
+            type: "field",
+            network: "tcp,udp",
+            outboundTag: "proxy-exit"
+          }
+        ]')
 
     local template
     template=$(jq -n -c \
@@ -97,7 +190,8 @@ configure_3xui_relay_template() {
         --arg exit_short_id "$exit_short_id" \
         --arg exit_sni "$exit_sni" \
         --arg exit_xhttp_path "$exit_xhttp_path" \
-        --argjson api_port "$api_port" \
+        --argjson api_port "$api_port"
+        --argjson routing_rules "$routing_rules" \
         '{
             log: {
                 loglevel: "warning",
@@ -181,18 +275,8 @@ configure_3xui_relay_template() {
                 }
             ],
             routing: {
-                rules: [
-                    {
-                        type: "field",
-                        inboundTag: ["api"],
-                        outboundTag: "api"
-                    },
-                    {
-                        type: "field",
-                        inboundTag: ["inbound-443"],
-                        outboundTag: "proxy-exit"
-                    }
-                ]
+                domainStrategy: "IPIfNonMatch",
+                rules: $routing_rules
             }
         }')
 
@@ -201,6 +285,12 @@ configure_3xui_relay_template() {
     xui_db_set "xrayTemplateConfig" "$template"
 
     log_ok "Xray relay template written to 3X-UI database (API port: $api_port)"
+    log_info "  Split routing: ${enable_split_routing}"
+    log_info "  .ru -> direct: ${enable_ru_direct}"
+    if [[ "${enable_split_routing,,}" == "y" ]]; then
+        log_info "  direct file: $direct_file"
+        log_info "  proxy file:  $proxy_file"
+    fi
 }
 
 create_3xui_relay_inbound() {

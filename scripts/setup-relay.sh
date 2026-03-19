@@ -96,6 +96,12 @@ main() {
         fi
     done
 
+    local enable_split_routing="n"
+    local enable_ru_direct="y"
+
+    prompt_input "Enable server-side split routing with direct/proxy domain lists? [y/N]" enable_split_routing "n"
+    prompt_input "Route all .ru domains via direct by default? [Y/n]" enable_ru_direct "y"
+
     # --- Step 3: System setup ---
     log_info "=== System Setup ==="
     update_system
@@ -152,7 +158,8 @@ main() {
         "$default_sub_id" "$exit_ip"
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
-        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$exit_xhttp_path"
+        "$exit_pubkey" "$exit_short_id" "$exit_sni" "$exit_xhttp_path" \
+        "$enable_split_routing" "$enable_ru_direct"
 
     # First restart: 3X-UI loads inbound + template, normalizes inbound JSON
     x-ui restart
