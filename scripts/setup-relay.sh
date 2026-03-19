@@ -65,39 +65,36 @@ main() {
     prompt_password "Admin password" admin_pass
 
     while true; do
-        prompt_input "Domain for subscriptions and traffic, optional like vpn.yourdomain.ru, Enter to skip" domain ""
-        if [[ -z "$domain" ]]; then
-            local reality_choice
-            reality_choice=1
+        prompt_input "Domain for 3xui panel, optional like panel.yourdomain.ru, Enter to skip" domain_panel ""
+        if [[ -z "$domain_panel" ]]; then
             log_info "No domain provided, skipping subscription setup"
             break
         fi
-        if validate_domain "$domain"; then
-            log_ok "Domain validated: $domain"
+        if validate_domain "$domain_panel"; then
+            log_ok "Domain validated: $domain_panel"
             break
         else
-            log_error "Invalid domain format: $domain"
-            echo "  Domain should be like: vpn.yourdomain.ru or sub.example.com"
+            log_error "Invalid domain format: $domain_panel"
+            echo "  Domain should be like: panel.yourdomain.ru"
             echo "  Press Enter to skip or enter correct domain"
         fi
     done
 
-    # --- Reality domain selection ---
-    log_info "=== Reality SNI Configuration ==="
-
-    if [[ -z "$domain" ]]; then
-        echo "  Note: No domain configured."
-    else
-          echo "Choose Reality SNI for incoming connections (what DPI will see):"
-          echo "  1) Use popular global domain (better anonymity, e.g., microsoft.com)"
-          echo "  2) Use your own domain (more legitimate if you own it)"
-          validate_choice "Select option" "1" reality_choice 1 2
-          if [[ "$reality_choice" == "2" ]]; then
-              log_ok "Domain validated: $domain"
-          else
-              log_info "Will auto-select best global domain for Reality SNI"
-          fi
-    fi
+    while true; do
+        prompt_input "Enter the Domain if you need a personal SNI for greater transparency to the provider. like sni.yourdomain.ru, Enter to skip" domain_sni ""
+        if [[ -z "$domain_sni" ]]; then
+            log_info "No domain provided, skipping subscription setup"
+            break
+        fi
+        if validate_domain "$domain_sni"; then
+            log_ok "Domain validated: $domain_sni"
+            break
+        else
+            log_error "Invalid domain format: $domain_sni"
+            echo "  Domain should be like: panel.yourdomain.ru"
+            echo "  Press Enter to skip or enter correct domain"
+        fi
+    done
 
     # --- Step 3: System setup ---
     log_info "=== System Setup ==="
@@ -108,15 +105,20 @@ main() {
     log_info "=== XRAY Setup ==="
     install_xray
 
-    # setup_reality_choice - Generate Reality keys and configure SNI
-    if [[ "$reality_choice" == "2" ]]; then
-        log_info "Using custom domain for Reality SNI: $domain"
-        export REALITY_DEST="$domain"
-        export REALITY_SERVER_NAME="$domain"
+    # --- Reality domain selection ---
+    log_info "=== Reality SNI Configuration ==="
+
+    # Generate Reality keys and configure SNI
+    if [[ -n "$domain_sni" ]]; then
+        log_info "Using custom domain for Reality SNI: $domain_sni"
+        export REALITY_DEST="$domain_sni"
+        export REALITY_SERVER_NAME="$domain_sni"
         log_ok "Reality dest: $REALITY_DEST"
+        check_site_tls13 "$domain_sni"
         generate_reality_keypair
         generate_short_id
     else
+        log_info "No custom SNI domain provided, will auto-select best global domain"
         setup_reality  # Original function - finds best global site
     fi
 
@@ -131,15 +133,15 @@ main() {
     install_3xui
     configure_3xui "$panel_port" "$panel_path" "$admin_user" "$admin_pass"
 
-    # Configure subscription (only if domain is provided)
+    # Configure subscription (only if panel domain is provided)
     local sub_port="" sub_path=""
-    if [[ -n "$domain" ]]; then
+    if [[ -n "$domain_panel" ]]; then
         sub_port=$((panel_port + 1))
         sub_path=$(generate_random_path)
-        configure_3xui_subscription "$domain" "$sub_port" "$sub_path"
-        issue_domain_cert "$domain" || true
+        configure_3xui_subscription "$domain_panel" "$sub_port" "$sub_path"
+        issue_domain_cert "$domain_panel" || true
     else
-        log_info "No domain provided — skipping subscriptions and SSL cert"
+        log_info "No panel domain provided — skipping subscriptions and SSL cert"
     fi
 
     # Create relay inbound and xray template (all DB writes)
@@ -183,26 +185,34 @@ main() {
     log_ok "RELAY server setup complete!"
     echo "==========================================="
     echo ""
-    echo "  Server:    ${server_ip}"
-    echo "  Protocol:  VLESS + Reality (TCP) → Exit (XHTTP)"
-    echo "  Port:      443"
-    echo "  Exit:      ${exit_ip}"
+    echo "  Server:      ${server_ip}"
+    echo "  Protocol:    VLESS + Reality (TCP) → Exit (XHTTP)"
+    echo "  Port:        443"
+    echo "  Exit:        ${exit_ip}"
     echo ""
-    echo "  Panel:     https://${server_ip}:${panel_port}/${panel_path}/"
-    echo "  User:      ${admin_user}"
+    echo "  Panel:        https://${server_ip}:${panel_port}/${panel_path}/"
+    echo "  Panel Domain: https://${domain_panel}:${panel_port}/${panel_path}/"
+    echo "  User:         ${admin_user}"
     echo ""
-    if [[ -n "$domain" ]]; then
+    if [[ -n "$domain_panel" ]]; then
         echo "-------------------------------------------"
         echo "  Subscriptions:"
         echo "-------------------------------------------"
-        echo "  Base URL:  https://${domain}:${sub_port}/${sub_path}/"
-        echo "  Default:   https://${domain}:${sub_port}/${sub_path}/${default_sub_id}"
+        echo "  Base URL:  https://${domain_panel}:${sub_port}/${sub_path}/"
+        echo "  Default:   https://${domain_panel}:${sub_port}/${sub_path}/${default_sub_id}"
         echo ""
-        echo "  DNS: set A-record ${domain} → ${server_ip}"
+        echo "  DNS: set A-record ${domain_panel} → ${server_ip}"
         echo ""
     else
         echo "  Subscriptions: not configured (no domain)"
         echo ""
+    fi
+    if [[ -n "$domain_sni" ]]; then
+        echo "-------------------------------------------"
+        echo "  Values for RELAY server setup:"
+        echo "-------------------------------------------"
+        echo "  Relay Reality SNI:   $REALITY_SERVER_NAME"
+        echo "-------------------------------------------"
     fi
     echo "  Next steps:"
     echo "    1. Log into 3X-UI panel"
