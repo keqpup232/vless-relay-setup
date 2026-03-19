@@ -48,9 +48,21 @@ xui_db_set() {
 build_domain_json_from_file() {
     local file="$1"
 
+    log_info "Loading domain list: $file"
+
     if [[ ! -f "$file" ]]; then
+        log_warn "File NOT FOUND: $file"
         echo '[]'
         return 0
+    fi
+
+    local count
+    count=$(grep -vE '^\s*$|^\s*#' "$file" | wc -l)
+
+    log_info "  Found $count entries"
+
+    if [[ "$count" -eq 0 ]]; then
+        log_warn "  File is empty (after filtering)"
     fi
 
     jq -Rsc '
@@ -104,8 +116,8 @@ configure_3xui_relay_template() {
 
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local direct_file="$script_dir/../direct-domains.txt"
-    local proxy_file="$script_dir/../proxy-domains.txt"
+    local direct_file="$script_dir/../../direct-domains.txt"
+    local proxy_file="$script_dir/../../proxy-domains.txt"
 
     log_info "Writing xray template config to 3X-UI database..."
 
@@ -113,8 +125,14 @@ configure_3xui_relay_template() {
     local proxy_json='[]'
 
     if [[ "${enable_split_routing,,}" == "y" ]]; then
+        log_info "Split routing is enabled"
+        log_info "  direct file: $direct_file"
+        log_info "  proxy file:  $proxy_file"
+
         direct_json=$(build_domain_json_from_file "$direct_file")
         proxy_json=$(build_domain_json_from_file "$proxy_file")
+    else
+        log_info "Split routing is disabled"
     fi
 
     local routing_rules='[]'
@@ -285,12 +303,7 @@ configure_3xui_relay_template() {
     xui_db_set "xrayTemplateConfig" "$template"
 
     log_ok "Xray relay template written to 3X-UI database (API port: $api_port)"
-    log_info "  Split routing: ${enable_split_routing}"
     log_info "  .ru -> direct: ${enable_ru_direct}"
-    if [[ "${enable_split_routing,,}" == "y" ]]; then
-        log_info "  direct file: $direct_file"
-        log_info "  proxy file:  $proxy_file"
-    fi
 }
 
 create_3xui_relay_inbound() {
