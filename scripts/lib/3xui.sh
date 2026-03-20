@@ -7,6 +7,8 @@ XUI_BIN="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/x-ui"
 XUI_DB="/etc/x-ui/x-ui.db"
 
 install_3xui() {
+    local skip_acme_port="${1:-false}"
+
     log_info "Installing 3X-UI panel..."
 
     # Open port 80 temporarily — the installer uses it for Let's Encrypt SSL cert
@@ -19,8 +21,10 @@ install_3xui() {
     bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh) < /tmp/xui-answers
     rm -f /tmp/xui-answers
 
-    # Close temporary port 80
-    ufw delete allow 80/tcp > /dev/null 2>&1 || true
+    # Close temporary port 80 — unless Caddy needs it permanently (SelfSteal mode)
+    if [[ "$skip_acme_port" != true ]]; then
+        ufw delete allow 80/tcp > /dev/null 2>&1 || true
+    fi
 
     if command -v x-ui &> /dev/null; then
         log_ok "3X-UI installed"
