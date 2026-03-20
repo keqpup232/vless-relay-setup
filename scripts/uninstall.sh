@@ -5,6 +5,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
+source "$SCRIPT_DIR/lib/caddy.sh" 2>/dev/null || true
 
 FORCE=false
 PURGE_CERTS=false
@@ -31,6 +32,7 @@ confirm_uninstall() {
     echo "  - UFW firewall rules"
     echo "  - SSL certificates (only with --purge-certs)"
     echo "  - sqlite3, socat"
+    echo "  - Caddy web server (if installed)"
     echo ""
     echo "  SSH keys and sshd_config will NOT be touched."
     echo ""
@@ -141,6 +143,22 @@ main() {
     uninstall_acme
     uninstall_fail2ban
     uninstall_ufw
+    # Caddy (SelfSteal)
+    if type uninstall_caddy &>/dev/null; then
+        if systemctl is-active caddy &>/dev/null || dpkg -l caddy &>/dev/null 2>&1; then
+            uninstall_caddy
+        fi
+    else
+        # Fallback if caddy.sh not available
+        if dpkg -l caddy &>/dev/null 2>&1; then
+            log_info "Removing Caddy..."
+            systemctl stop caddy 2>/dev/null || true
+            apt-get purge -y caddy > /dev/null 2>&1 || true
+            rm -rf /etc/caddy /var/www/html/selfsteal 2>/dev/null || true
+            rm -f /dev/shm/caddy.sock 2>/dev/null || true
+            log_ok "Caddy removed"
+        fi
+    fi
     uninstall_packages
     cleanup_files
 
