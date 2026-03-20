@@ -26,7 +26,8 @@ main() {
     check_root
 
     # Backup 3X-UI database before any changes
-    local backup_path="${XUI_DB}.bak.$(date +%Y%m%d-%H%M%S)"
+    local backup_path
+    backup_path="${XUI_DB}.bak.$(date +%Y%m%d-%H%M%S)"
     cp "$XUI_DB" "$backup_path"
     log_ok "Database backup saved: $backup_path"
 

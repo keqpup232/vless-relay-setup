@@ -110,7 +110,8 @@ main() {
 
     # --- Step 5: Update XRAY config ---
     log_info "=== Updating XRAY Config ==="
-    local backup_path="${XRAY_CONFIG}.bak.$(date +%Y%m%d-%H%M%S)"
+    local backup_path
+    backup_path="${XRAY_CONFIG}.bak.$(date +%Y%m%d-%H%M%S)"
     cp "$XRAY_CONFIG" "$backup_path"
     log_ok "Backup saved: $backup_path"
 
