@@ -16,6 +16,12 @@ User → Relay server (3X-UI + embedded XRAY, port 443)
               → Exit server (standalone XRAY, port 443)
                    → routing: geoip:private → block
                    → internet (freedom outbound, domainStrategy: UseIP)
+
+SelfSteal mode (optional):
+  XRAY Reality dest → /dev/shm/caddy.sock (xver=1, PROXY protocol)
+  DPI probe → Caddy (unix socket) → real website with valid cert
+  DNS A-record → server IP (eliminates IP/SNI mismatch)
+  Caddy also reverse-proxies 3X-UI panel and subscriptions (relay only)
 ```
 
 **Exit server**: XRAY runs as systemd service, config in `/usr/local/etc/xray/config.json`.
@@ -36,8 +42,9 @@ Setup order is always exit first, then relay (relay needs exit server's keys/UUI
 
 All sourced via `BASH_SOURCE` from orchestration scripts:
 
-- `common.sh` — logging (`log_info/ok/warn/error`), `prompt_input`, `prompt_password`, validation, random generation, `PROJECT_VERSION` from `VERSION` file
-- `security.sh` — SSH hardening, UFW, fail2ban
+- `common.sh` — logging (`log_info/ok/warn/error`), `prompt_input`, `prompt_password`, validation (`validate_domain`, `check_domain_dns`), random generation, `PROJECT_VERSION` from `VERSION` file
+- `security.sh` — SSH hardening (custom port support), UFW, fail2ban
+- `caddy.sh` — Caddy installation, Caddyfile generation, static site content, systemd dependency, uninstall (SelfSteal mode only)
 - `reality.sh` — Reality key generation, destination site selection
 - `xray.sh` — XRAY installation, exit server JSON config
 - `3xui.sh` — 3X-UI install/configure, SQLite operations, SSL certs, inbound/template management
@@ -81,9 +88,23 @@ See `patch_3xui_relay_inbound()` and `create_3xui_relay_inbound()` in `3xui.sh`.
 
 ### Update Scripts
 
-`update-exit.sh` reads current keys/UUID from XRAY config, regenerates config via `configure_xray_exit()`, restarts. `update-relay.sh` reads current exit params from DB, patches inbound sniffing (routeOnly) via jq, regenerates template via `configure_3xui_relay_template()`, restarts. Both create timestamped backups and auto-rollback on failure.
+`update-exit.sh` reads current keys/UUID/dest/xver from XRAY config, regenerates config via `configure_xray_exit()`, restarts. `update-relay.sh` reads current exit params from DB, patches inbound sniffing (routeOnly) via jq, regenerates template via `configure_3xui_relay_template()`, restarts. Both create timestamped backups and auto-rollback on failure.
+
+Both update scripts detect SelfSteal mode (by checking if `dest` contains `caddy.sock`) and preserve it. They also detect the current SSH port from `sshd_config` and pass it through to `setup_security`. With `--upgrade`, Caddy is also updated in SelfSteal mode.
 
 The inbound patch in `update-relay.sh` runs between `x-ui stop` and `x-ui start` — same window as the template write. This is safe because x-ui is stopped (no in-memory overwrite risk).
+
+### Dest Format Convention
+
+Callers pass the FULL dest value including port if needed. Functions use it as-is without appending `:443`:
+- Auto mode: `dest="www.microsoft.com:443"` (port set in `reality.sh`)
+- SelfSteal mode: `dest="/dev/shm/caddy.sock"` (no port for unix socket)
+
+This affects `configure_xray_exit()`, `create_3xui_relay_inbound()`, and both update scripts.
+
+### Custom SSH Port
+
+`setup_security()` accepts `--ssh-port PORT` flag. `setup_ssh_hardening()` modifies `sshd_config`, `setup_fail2ban()` configures the port in jail config, and UFW opens the custom port. Update scripts detect the current port via `grep '^Port ' /etc/ssh/sshd_config` with fallback to 22.
 
 ### Setup Guard
 
