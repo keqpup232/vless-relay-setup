@@ -443,3 +443,128 @@ issue_domain_cert() {
 
     ufw delete allow 80/tcp > /dev/null 2>&1 || true
 }
+
+create_3xui_cdn_inbound() {
+    local exit_uuid="$1"
+    local cdn_domain="$2"
+    local cdn_ws_path="$3"
+    local sub_id="$4"
+    local cdn_ws_port="${5:-}"
+
+    log_info "Creating CDN fallback inbound in 3X-UI database..."
+
+    # Use a random localhost port — XRAY will listen but nothing connects externally
+    if [[ -z "$cdn_ws_port" ]]; then
+        cdn_ws_port=$(generate_random_port)
+    fi
+
+    local settings stream_settings sniffing
+
+    settings=$(jq -n -c \
+        --arg uuid "$exit_uuid" \
+        --arg sub_id "$sub_id" \
+        '{
+            clients: [{
+                id: $uuid,
+                email: "cdn-fallback",
+                limitIp: 0,
+                totalGB: 0,
+                expiryTime: 0,
+                enable: true,
+                subId: $sub_id,
+                tgId: "",
+                reset: 0
+            }],
+            decryption: "none",
+            fallbacks: []
+        }')
+
+    stream_settings=$(jq -n -c \
+        --arg ws_path "$cdn_ws_path" \
+        '{
+            network: "ws",
+            security: "none",
+            wsSettings: {
+                path: ("/"+$ws_path),
+                headers: {}
+            }
+        }')
+
+    sniffing='{"enabled":false}'
+
+    local external_proxy
+    external_proxy=$(jq -n -c \
+        --arg dest "$cdn_domain" \
+        '[{
+            forceTls: "tls",
+            dest: $dest,
+            port: 443,
+            remark: ""
+        }]')
+
+    # Escape single quotes for SQLite
+    local s_settings="${settings//\'/\'\'}"
+    local s_stream="${stream_settings//\'/\'\'}"
+    local s_sniffing="${sniffing//\'/\'\'}"
+    local s_external="${external_proxy//\'/\'\'}"
+
+    # Check if externalProxy column exists
+    local has_external_proxy
+    has_external_proxy=$(sqlite3 "$XUI_DB" \
+        "SELECT COUNT(*) FROM pragma_table_info('inbounds') WHERE name='externalProxy';")
+
+    if [[ "$has_external_proxy" -gt 0 ]]; then
+        sqlite3 "$XUI_DB" "INSERT INTO inbounds (
+            user_id, up, down, total, remark, enable, expiry_time,
+            listen, port, protocol, settings, stream_settings,
+            tag, sniffing, externalProxy
+        ) VALUES (
+            1, 0, 0, 0, 'CDN Fallback', 1, 0,
+            '127.0.0.1', ${cdn_ws_port}, 'vless',
+            '${s_settings}', '${s_stream}',
+            'inbound-cdn', '${s_sniffing}', '${s_external}'
+        );"
+        log_ok "CDN inbound created with externalProxy -> ${cdn_domain}:443"
+    else
+        log_warn "externalProxy column not found in 3X-UI database"
+        log_warn "CDN profile will not appear in subscriptions automatically"
+        log_warn "Upgrade 3X-UI to latest version for full CDN subscription support"
+        # Still create inbound without externalProxy
+        sqlite3 "$XUI_DB" "INSERT INTO inbounds (
+            user_id, up, down, total, remark, enable, expiry_time,
+            listen, port, protocol, settings, stream_settings,
+            tag, sniffing
+        ) VALUES (
+            1, 0, 0, 0, 'CDN Fallback', 1, 0,
+            '127.0.0.1', ${cdn_ws_port}, 'vless',
+            '${s_settings}', '${s_stream}',
+            'inbound-cdn', '${s_sniffing}'
+        );"
+        log_ok "CDN inbound created (configure externalProxy manually in panel)"
+    fi
+}
+
+patch_3xui_cdn_inbound() {
+    local sub_id="$1"
+
+    log_info "Patching CDN inbound subscription fields..."
+
+    local current_settings
+    current_settings=$(sqlite3 "$XUI_DB" \
+        "SELECT settings FROM inbounds WHERE tag='inbound-cdn';") || return 0
+
+    if [[ -z "$current_settings" ]]; then
+        log_warn "CDN inbound not found, skipping patch"
+        return 0
+    fi
+
+    local patched_settings
+    patched_settings=$(echo "$current_settings" | jq -c \
+        --arg sub_id "$sub_id" \
+        '.clients[0].subId = $sub_id | .clients[0].tgId = "" | .clients[0].reset = 0')
+    local s_settings="${patched_settings//\'/\'\'}"
+    sqlite3 "$XUI_DB" \
+        "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-cdn';"
+
+    log_ok "CDN inbound patched (subId for subscriptions)"
+}
