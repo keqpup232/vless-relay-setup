@@ -59,7 +59,7 @@ main() {
     fi
 
     local selfsteal_domain=""
-    prompt_input "Domain for SelfSteal SNI (Enter to skip for auto-select)" selfsteal_domain ""
+    prompt_input "Domain for SelfSteal SNI (Enter to skip, required for CDN mode)" selfsteal_domain ""
 
     if [[ -n "$selfsteal_domain" ]]; then
         if ! validate_domain "$selfsteal_domain"; then
@@ -67,6 +67,23 @@ main() {
             exit 1
         fi
         check_domain_dns "$selfsteal_domain" || exit 1
+    fi
+
+    local cdn_domain=""
+    if [[ -n "$selfsteal_domain" ]]; then
+        prompt_input "CDN domain for Cloudflare (Enter to skip)" cdn_domain ""
+        if [[ -n "$cdn_domain" ]]; then
+            if ! validate_domain "$cdn_domain"; then
+                log_error "Invalid domain format: $cdn_domain"
+                exit 1
+            fi
+            if [[ "$cdn_domain" == "$selfsteal_domain" ]]; then
+                log_error "CDN domain must be different from SelfSteal domain"
+                exit 1
+            fi
+            # Don't check DNS — CDN domain resolves to Cloudflare IP, not server IP
+            log_info "CDN domain: $cdn_domain (configure Cloudflare after setup)"
+        fi
     fi
 
     # --- Step 2: System setup ---
@@ -83,6 +100,13 @@ main() {
     xhttp_path=$(generate_random_path)
     log_ok "Generated UUID for relay connection: $exit_uuid"
 
+    local cdn_ws_path="" cdn_ws_port=""
+    if [[ -n "$cdn_domain" ]]; then
+        cdn_ws_path=$(generate_random_path)
+        cdn_ws_port=$(generate_random_port "$panel_port")
+        log_ok "Generated CDN WebSocket path and port"
+    fi
+
     if [[ -n "$selfsteal_domain" ]]; then
         # SelfSteal mode: Caddy + unix socket
         log_info "=== SelfSteal Setup ==="
@@ -92,7 +116,8 @@ main() {
         generate_short_id
         export REALITY_DEST="$CADDY_SOCK"
         export REALITY_SERVER_NAME="$selfsteal_domain"
-        generate_caddyfile "$selfsteal_domain"
+        generate_caddyfile "$selfsteal_domain" "" "" "" "" \
+            "$cdn_domain" "$cdn_ws_path" "$cdn_ws_port"
         # Caddy is NOT started yet — port 80 must stay free for 3X-UI installer
         # (its ACME HTTP-01 challenge needs port 80).
         # systemd dependency is also deferred: Wants=caddy.service would auto-start
@@ -100,7 +125,7 @@ main() {
 
         configure_xray_exit 443 "$exit_uuid" "$REALITY_PRIVATE_KEY" \
             "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
-            "$xhttp_path" 1
+            "$xhttp_path" 1 "$cdn_ws_port" "$cdn_ws_path"
     else
         # Auto mode: select best external site
         setup_reality
@@ -152,6 +177,14 @@ EXIT_SERVER_NAME=$REALITY_SERVER_NAME
 EXIT_XHTTP_PATH=$xhttp_path
 EOF
 
+    if [[ -n "$cdn_domain" ]]; then
+        cat >> /root/exit-server-info.txt << EOF
+CDN_DOMAIN=$cdn_domain
+CDN_WS_PATH=$cdn_ws_path
+CDN_WS_PORT=$cdn_ws_port
+EOF
+    fi
+
     echo ""
     echo "==========================================="
     log_ok "EXIT server setup complete!"
@@ -163,6 +196,9 @@ EOF
     echo "  SNI:       ${REALITY_SERVER_NAME}"
     if [[ -n "$selfsteal_domain" ]]; then
         echo "  SelfSteal: ${selfsteal_domain} (Caddy + unix socket)"
+    fi
+    if [[ -n "$cdn_domain" ]]; then
+        echo "  CDN:       ${cdn_domain} (Cloudflare WebSocket)"
     fi
     echo ""
     echo "  Panel:     https://${server_ip}:${panel_port}/${panel_path}/"
@@ -185,10 +221,24 @@ EOF
     echo "  Exit Reality shortId: $REALITY_SHORT_ID"
     echo "  Exit Reality SNI:     $REALITY_SERVER_NAME"
     echo "  Exit XHTTP path:     $xhttp_path"
+    if [[ -n "$cdn_domain" ]]; then
+        echo "  Exit CDN domain:      $cdn_domain"
+        echo "  Exit CDN WS path:     $cdn_ws_path"
+    fi
     echo "-------------------------------------------"
     echo ""
     echo "  Saved to /root/exit-server-info.txt"
     echo ""
+    if [[ -n "$cdn_domain" ]]; then
+        echo "-------------------------------------------"
+        echo "  Cloudflare setup (manual):"
+        echo "-------------------------------------------"
+        echo "  1. Add ${cdn_domain} to Cloudflare (free plan)"
+        echo "  2. DNS: A ${cdn_domain} -> ${server_ip} (Proxy: ON)"
+        echo "  3. SSL/TLS -> Full"
+        echo "  4. Network -> WebSockets: ON"
+        echo ""
+    fi
     echo "  Next: run ./scripts/setup.sh relay on the relay server"
     echo ""
 }
