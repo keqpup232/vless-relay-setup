@@ -97,6 +97,15 @@ main() {
         log_info "SelfSteal mode detected"
     fi
 
+    local is_cdn=false
+    local cdn_settings
+    cdn_settings=$(sqlite3 "$XUI_DB" \
+        "SELECT settings FROM inbounds WHERE tag='inbound-cdn';" 2>/dev/null) || true
+    if [[ -n "$cdn_settings" ]]; then
+        is_cdn=true
+        log_info "CDN mode detected"
+    fi
+
     # --- Step 3: System update ---
     log_info "=== System Update ==="
     update_system
@@ -191,6 +200,9 @@ main() {
     fi
     echo "  Security re-applied"
     echo "  Clients and subscriptions preserved"
+    if [[ "$is_cdn" == true ]]; then
+        echo "  CDN fallback inbound preserved"
+    fi
     echo ""
 }
 
