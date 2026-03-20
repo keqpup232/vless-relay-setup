@@ -43,6 +43,9 @@ generate_caddyfile() {
     local panel_port="${3:-}"
     local sub_domain="${4:-}"
     local sub_port="${5:-}"
+    local cdn_domain="${6:-}"
+    local cdn_ws_path="${7:-}"
+    local cdn_ws_port="${8:-}"
 
     log_info "Generating Caddyfile..."
 
@@ -94,6 +97,23 @@ https://${sub_domain} {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-Proto {scheme}
     }
+}
+CADDYEOF
+    fi
+
+    if [[ -n "$cdn_domain" && -n "$cdn_ws_path" && -n "$cdn_ws_port" ]]; then
+        cat >> /etc/caddy/Caddyfile << CADDYEOF
+
+https://${cdn_domain} {
+    bind unix/${CADDY_SOCK}
+    @websocket {
+        path /${cdn_ws_path}
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websocket 127.0.0.1:${cdn_ws_port}
+    root * /var/www/html/selfsteal
+    file_server
 }
 CADDYEOF
     fi
