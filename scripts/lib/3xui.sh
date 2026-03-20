@@ -458,6 +458,12 @@ create_3xui_cdn_inbound() {
         cdn_ws_port=$(generate_random_port)
     fi
 
+    # Validate port is numeric (防止 SQL injection)
+    if ! [[ "$cdn_ws_port" =~ ^[0-9]+$ ]]; then
+        log_error "Invalid CDN WS port: $cdn_ws_port"
+        return 1
+    fi
+
     local settings stream_settings sniffing
 
     settings=$(jq -n -c \

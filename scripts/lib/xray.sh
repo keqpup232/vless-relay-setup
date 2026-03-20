@@ -114,7 +114,7 @@ XRAYEOF
     if [[ -n "$cdn_ws_port" && -n "$cdn_ws_path" ]]; then
         log_info "Adding CDN WebSocket inbound on 127.0.0.1:${cdn_ws_port}..."
         local tmp_config
-        tmp_config=$(jq \
+        if ! tmp_config=$(jq \
             --argjson ws_port "$cdn_ws_port" \
             --arg ws_path "$cdn_ws_path" \
             '.inbounds += [{
@@ -137,7 +137,10 @@ XRAYEOF
                     destOverride: ["http","tls","quic"],
                     routeOnly: true
                 }
-            }]' /usr/local/etc/xray/config.json)
+            }]' /usr/local/etc/xray/config.json); then
+            log_error "Failed to add CDN WebSocket inbound (jq error)"
+            exit 1
+        fi
         echo "$tmp_config" > /usr/local/etc/xray/config.json
         log_ok "CDN WebSocket inbound added (port: $cdn_ws_port)"
     fi
