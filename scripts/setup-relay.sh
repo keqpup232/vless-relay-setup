@@ -1,5 +1,5 @@
 #!/bin/bash
-# Relay server setup (Russia)
+# Relay server setup
 # Run: ./setup.sh relay
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -9,6 +9,7 @@ source "$SCRIPT_DIR/lib/reality.sh"
 source "$SCRIPT_DIR/lib/xray.sh"
 source "$SCRIPT_DIR/lib/3xui.sh"
 source "$SCRIPT_DIR/lib/verify.sh"
+source "$SCRIPT_DIR/lib/caddy.sh"
 
 main() {
     local force=false skip_ssh=false
@@ -71,7 +72,36 @@ main() {
     prompt_input "Admin username" admin_user "admin"
     validate_ascii "$admin_user" "Username" || exit 1
     prompt_password "Admin password" admin_pass
-    prompt_input "Domain for subscriptions, optional, Enter to skip" domain ""
+
+    local selfsteal_domain="" panel_domain="" sub_domain=""
+    prompt_input "Domain for SelfSteal SNI (Enter to skip for auto-select)" selfsteal_domain ""
+
+    if [[ -n "$selfsteal_domain" ]]; then
+        if ! validate_domain "$selfsteal_domain"; then
+            log_error "Invalid domain format: $selfsteal_domain"
+            exit 1
+        fi
+        check_domain_dns "$selfsteal_domain" || exit 1
+
+        prompt_input "Domain for 3X-UI panel (e.g. panel.${selfsteal_domain})" panel_domain
+        if ! validate_domain "$panel_domain"; then
+            log_error "Invalid domain format: $panel_domain"
+            exit 1
+        fi
+        check_domain_dns "$panel_domain" || exit 1
+
+        prompt_input "Domain for subscriptions (Enter to skip)" sub_domain ""
+        if [[ -n "$sub_domain" ]]; then
+            if ! validate_domain "$sub_domain"; then
+                log_error "Invalid domain format: $sub_domain"
+                exit 1
+            fi
+            check_domain_dns "$sub_domain" || exit 1
+        fi
+    else
+        # Non-SelfSteal: keep existing single domain prompt
+        prompt_input "Domain for subscriptions, optional, Enter to skip" domain ""
+    fi
 
     # --- Step 3: System setup ---
     log_info "=== System Setup ==="
@@ -81,7 +111,19 @@ main() {
     # --- Step 4: Install XRAY (for key generation only) ---
     log_info "=== XRAY Setup ==="
     install_xray
-    setup_reality  # Generate local Reality keys and dest
+
+    if [[ -n "$selfsteal_domain" ]]; then
+        # SelfSteal mode
+        log_info "=== SelfSteal Setup ==="
+        install_caddy
+        setup_selfsteal_content
+        generate_reality_keypair
+        generate_short_id
+        export REALITY_DEST="$CADDY_SOCK"
+        export REALITY_SERVER_NAME="$selfsteal_domain"
+    else
+        setup_reality  # Generate local Reality keys and dest
+    fi
 
     local relay_uuid
     relay_uuid=$(xray uuid)
@@ -91,26 +133,64 @@ main() {
 
     # --- Step 5: Install and configure 3X-UI ---
     log_info "=== 3X-UI Setup ==="
-    install_3xui
+
+    if [[ -n "$selfsteal_domain" ]]; then
+        install_3xui true  # skip port 80 cleanup — Caddy needs it
+    else
+        install_3xui
+    fi
+
     configure_3xui "$panel_port" "$panel_path" "$admin_user" "$admin_pass"
 
-    # Configure subscription (only if domain is provided)
+    # Configure subscription + SelfSteal-specific settings
+    # All DB writes happen in one stop/start window to avoid extra restarts
     local sub_port="" sub_path=""
-    if [[ -n "$domain" ]]; then
-        sub_port=$((panel_port + 1))
-        sub_path=$(generate_random_path)
-        configure_3xui_subscription "$domain" "$sub_port" "$sub_path"
-        issue_domain_cert "$domain" || true
+    if [[ -n "$selfsteal_domain" ]]; then
+        x-ui stop
+
+        # Bind panel to localhost (Caddy proxies external access)
+        xui_db_set "webListen" "127.0.0.1"
+
+        # SelfSteal: subscriptions via Caddy (if sub_domain provided)
+        if [[ -n "$sub_domain" ]]; then
+            sub_port=$((panel_port + 1))
+            sub_path=$(generate_random_path)
+            xui_db_set "subEnable" "true"
+            xui_db_set "subPort" "$sub_port"
+            xui_db_set "subPath" "/$sub_path/"
+            xui_db_set "subDomain" "$sub_domain"
+            # No issue_domain_cert — Caddy handles TLS
+        fi
+
+        x-ui start
+
+        # Generate Caddyfile with all domains
+        generate_caddyfile "$selfsteal_domain" "$panel_domain" "$panel_port" \
+            "$sub_domain" "$sub_port"
+        start_caddy
+        setup_caddy_systemd_dependency "x-ui"
     else
-        log_info "No domain provided — skipping subscriptions and SSL cert"
+        # Non-SelfSteal: existing flow
+        if [[ -n "$domain" ]]; then
+            sub_port=$((panel_port + 1))
+            sub_path=$(generate_random_path)
+            configure_3xui_subscription "$domain" "$sub_port" "$sub_path"
+            issue_domain_cert "$domain" || true
+        else
+            log_info "No domain provided — skipping subscriptions and SSL cert"
+        fi
     fi
 
     # Create relay inbound and xray template (all DB writes)
     local default_sub_id
     default_sub_id=$(head -c 8 /dev/urandom | xxd -p)
+
+    local xver=0
+    [[ -n "$selfsteal_domain" ]] && xver=1
+
     create_3xui_relay_inbound "$relay_uuid" "$REALITY_PRIVATE_KEY" \
         "$REALITY_PUBLIC_KEY" "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
-        "$default_sub_id" "$exit_ip" 0
+        "$default_sub_id" "$exit_ip" "$xver"
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
         "$exit_pubkey" "$exit_short_id" "$exit_sni" "$exit_xhttp_path"
@@ -131,7 +211,10 @@ main() {
     local security_args=()
     [[ "$skip_ssh" == true ]] && security_args+=("--skip-ssh")
     security_args+=(22:SSH 443:XRAY "$panel_port:3X-UI Panel")
-    if [[ -n "$sub_port" ]]; then
+    if [[ -n "$selfsteal_domain" ]]; then
+        security_args+=(80:Caddy-ACME)
+    elif [[ -n "$sub_port" ]]; then
+        # Only open sub_port directly when NOT using SelfSteal (Caddy proxies it otherwise)
         security_args+=("$sub_port:Subscription")
     fi
     setup_security "${security_args[@]}"
@@ -153,21 +236,45 @@ main() {
     echo "  Port:      443"
     echo "  Exit:      ${exit_ip}"
     echo ""
-    echo "  Panel:     https://${server_ip}:${panel_port}/${panel_path}/"
-    echo "  User:      ${admin_user}"
-    echo ""
-    if [[ -n "$domain" ]]; then
-        echo "-------------------------------------------"
-        echo "  Subscriptions:"
-        echo "-------------------------------------------"
-        echo "  Base URL:  https://${domain}:${sub_port}/${sub_path}/"
-        echo "  Default:   https://${domain}:${sub_port}/${sub_path}/${default_sub_id}"
+
+    if [[ -n "$selfsteal_domain" ]]; then
+        echo "  SelfSteal: ${selfsteal_domain}"
         echo ""
-        echo "  DNS: set A-record ${domain} → ${server_ip}"
+        echo "  Panel:     https://${panel_domain}/${panel_path}/"
+        echo "  User:      ${admin_user}"
+        echo ""
+        if [[ -n "$sub_domain" ]]; then
+            echo "-------------------------------------------"
+            echo "  Subscriptions:"
+            echo "-------------------------------------------"
+            echo "  Base URL:  https://${sub_domain}/${sub_path}/"
+            echo "  Default:   https://${sub_domain}/${sub_path}/${default_sub_id}"
+            echo ""
+        fi
+        echo "  DNS records required:"
+        echo "    A  ${selfsteal_domain}  → ${server_ip}"
+        echo "    A  ${panel_domain}      → ${server_ip}"
+        if [[ -n "$sub_domain" ]]; then
+            echo "    A  ${sub_domain}        → ${server_ip}"
+        fi
         echo ""
     else
-        echo "  Subscriptions: not configured (no domain)"
+        echo "  Panel:     https://${server_ip}:${panel_port}/${panel_path}/"
+        echo "  User:      ${admin_user}"
         echo ""
+        if [[ -n "${domain:-}" ]]; then
+            echo "-------------------------------------------"
+            echo "  Subscriptions:"
+            echo "-------------------------------------------"
+            echo "  Base URL:  https://${domain}:${sub_port}/${sub_path}/"
+            echo "  Default:   https://${domain}:${sub_port}/${sub_path}/${default_sub_id}"
+            echo ""
+            echo "  DNS: set A-record ${domain} → ${server_ip}"
+            echo ""
+        else
+            echo "  Subscriptions: not configured (no domain)"
+            echo ""
+        fi
     fi
     echo "  Next steps:"
     echo "    1. Log into 3X-UI panel"
