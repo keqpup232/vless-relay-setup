@@ -4,6 +4,8 @@
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 setup_ssh_hardening() {
+    local ssh_port="${1:-22}"
+
     log_info "Hardening SSH..."
 
     if [[ ! -s /root/.ssh/authorized_keys ]]; then
@@ -19,13 +21,20 @@ setup_ssh_hardening() {
     sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' "$ssh_config"
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' "$ssh_config"
 
+    # Set SSH port
+    if [[ "$ssh_port" != "22" ]]; then
+        sed -i '/^#\?Port /d' "$ssh_config"
+        echo "Port $ssh_port" >> "$ssh_config"
+        log_info "SSH port changed to $ssh_port"
+    fi
+
     # Service is named "ssh" on Debian/Ubuntu, "sshd" on RHEL/Fedora
     local sshd_service="sshd"
     if systemctl list-unit-files ssh.service &>/dev/null; then
         sshd_service="ssh"
     fi
     systemctl restart "$sshd_service"
-    log_ok "SSH hardened: password auth disabled, key-only access"
+    log_ok "SSH hardened: password auth disabled, key-only access, port $ssh_port"
 }
 
 setup_ufw() {
@@ -51,11 +60,13 @@ setup_ufw() {
 }
 
 setup_fail2ban() {
+    local ssh_port="${1:-22}"
+
     log_info "Installing and configuring fail2ban..."
 
     apt-get install -y -qq fail2ban > /dev/null 2>&1
 
-    cat > /etc/fail2ban/jail.local << 'JAIL'
+    cat > /etc/fail2ban/jail.local << JAIL
 [DEFAULT]
 bantime = 3600
 findtime = 600
@@ -64,27 +75,31 @@ backend = systemd
 
 [sshd]
 enabled = true
-port = ssh
+port = ${ssh_port}
 JAIL
 
     systemctl enable fail2ban
     systemctl restart fail2ban
-    log_ok "fail2ban configured: ban after 3 attempts for 1 hour"
+    log_ok "fail2ban configured: ban after 3 attempts for 1 hour (port $ssh_port)"
 }
 
 setup_security() {
-    # Usage: setup_security [--skip-ssh] port:label [port:label ...]
+    # Usage: setup_security [--skip-ssh] [--ssh-port PORT] port:label [port:label ...]
     local skip_ssh=false
-    if [[ "${1:-}" == "--skip-ssh" ]]; then
-        skip_ssh=true
-        shift
-    fi
+    local ssh_port=22
+    while [[ "${1:-}" == --* ]]; do
+        case "$1" in
+            --skip-ssh) skip_ssh=true; shift ;;
+            --ssh-port) ssh_port="$2"; shift 2 ;;
+            *) break ;;
+        esac
+    done
 
     if [[ "$skip_ssh" == true ]]; then
         log_info "Skipping SSH hardening (--skip-ssh)"
     else
-        setup_ssh_hardening
+        setup_ssh_hardening "$ssh_port"
     fi
-    setup_fail2ban
+    setup_fail2ban "$ssh_port"
     setup_ufw "$@"
 }

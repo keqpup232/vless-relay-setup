@@ -127,9 +127,14 @@ main() {
 
     # --- Step 6: Security ---
     log_info "=== Security ==="
+    local ssh_port
+    ssh_port=$(grep -E '^Port ' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}') || true
+    ssh_port="${ssh_port:-22}"
+    log_info "Current SSH port: $ssh_port"
+
     local security_args=()
     [[ "$skip_ssh" == true ]] && security_args+=("--skip-ssh")
-    security_args+=(22:SSH 443:XRAY)
+    security_args+=(--ssh-port "$ssh_port" "$ssh_port":SSH 443:XRAY)
     if [[ -n "$panel_port" ]]; then
         security_args+=("$panel_port:3X-UI Panel")
     fi

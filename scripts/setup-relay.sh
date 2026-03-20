@@ -73,6 +73,13 @@ main() {
     validate_ascii "$admin_user" "Username" || exit 1
     prompt_password "Admin password" admin_pass
 
+    local ssh_port=22
+    prompt_input "Custom SSH port (Enter for default 22)" ssh_port "22"
+    if ! [[ "$ssh_port" =~ ^[0-9]+$ ]] || [[ "$ssh_port" -lt 1 || "$ssh_port" -gt 65535 ]]; then
+        log_error "Invalid port: $ssh_port"
+        exit 1
+    fi
+
     local selfsteal_domain="" panel_domain="" sub_domain=""
     prompt_input "Domain for SelfSteal SNI (Enter to skip for auto-select)" selfsteal_domain ""
 
@@ -210,7 +217,7 @@ main() {
     log_info "=== Security Setup ==="
     local security_args=()
     [[ "$skip_ssh" == true ]] && security_args+=("--skip-ssh")
-    security_args+=(22:SSH 443:XRAY "$panel_port:3X-UI Panel")
+    security_args+=(--ssh-port "$ssh_port" "$ssh_port":SSH 443:XRAY "$panel_port:3X-UI Panel")
     if [[ -n "$selfsteal_domain" ]]; then
         security_args+=(80:Caddy-ACME)
     elif [[ -n "$sub_port" ]]; then
@@ -275,6 +282,13 @@ main() {
             echo "  Subscriptions: not configured (no domain)"
             echo ""
         fi
+    fi
+    if [[ "$ssh_port" != "22" ]]; then
+        echo "  SSH port:  ${ssh_port}"
+        echo ""
+        echo "  WARNING: Update your SSH config to use port ${ssh_port}"
+        echo "           ssh -p ${ssh_port} root@${server_ip}"
+        echo ""
     fi
     echo "  Next steps:"
     echo "    1. Log into 3X-UI panel"
