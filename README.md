@@ -104,6 +104,7 @@ sudo ./scripts/setup.sh exit
 3X-UI panel secret path [a8Kx...]: ← Enter (или свой путь)
 Admin username [admin]:            ← Enter (или своё имя)
 Admin password:                    ← введите пароль (не отображается при вводе)
+Custom SSH port (Enter for default 22): ← Enter (или свой порт, чтобы уменьшить сканирование ботами)
 ```
 
 Далее скрипт спросит про SelfSteal:
@@ -185,6 +186,7 @@ Exit server XHTTP path:       ← xK9mP2vL
 3X-UI panel secret path [xK9m...]:                         ← Enter
 Admin username [admin]:                                    ← Enter
 Admin password:                                            ← пароль
+Custom SSH port (Enter for default 22):                    ← Enter или свой порт
 Domain for SelfSteal SNI (Enter to skip for auto-select):  ← домен или Enter
 ```
 
@@ -361,7 +363,7 @@ SSH-ключи и `sshd_config` **не удаляются** — доступ к 
 
 | Компонент | Что настроено |
 |-----------|--------------|
-| SSH | Только ключевая аутентификация, пароли отключены (`--skip-ssh` чтобы пропустить) |
+| SSH | Только ключевая аутентификация, пароли отключены, опциональная смена порта (`--skip-ssh` чтобы пропустить) |
 | fail2ban | Блокировка IP после 3 неудачных попыток на 1 час |
 | UFW | Открыты только нужные порты: SSH, XRAY (443), панель, подписки |
 | 3X-UI | Доступ по случайному порту + секретному URL-пути |
