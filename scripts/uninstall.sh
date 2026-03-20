@@ -153,9 +153,16 @@ main() {
         if dpkg -l caddy &>/dev/null 2>&1; then
             log_info "Removing Caddy..."
             systemctl stop caddy 2>/dev/null || true
+            systemctl disable caddy 2>/dev/null || true
             apt-get purge -y caddy > /dev/null 2>&1 || true
             rm -rf /etc/caddy /var/www/html/selfsteal 2>/dev/null || true
             rm -f /dev/shm/caddy.sock 2>/dev/null || true
+            rm -rf /etc/systemd/system/caddy.service.d 2>/dev/null || true
+            rm -f /etc/systemd/system/xray.service.d/after-caddy.conf 2>/dev/null || true
+            rm -f /etc/systemd/system/x-ui.service.d/after-caddy.conf 2>/dev/null || true
+            rm -f /etc/apt/sources.list.d/caddy-stable.list 2>/dev/null || true
+            rm -f /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null || true
+            systemctl daemon-reload 2>/dev/null || true
             log_ok "Caddy removed"
         fi
     fi

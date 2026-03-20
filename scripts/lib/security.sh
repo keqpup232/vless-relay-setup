@@ -21,9 +21,9 @@ setup_ssh_hardening() {
     sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' "$ssh_config"
     sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' "$ssh_config"
 
-    # Set SSH port
+    # Set SSH port — always clean existing Port lines to handle revert to 22
+    sed -i '/^#\?Port /d' "$ssh_config"
     if [[ "$ssh_port" != "22" ]]; then
-        sed -i '/^#\?Port /d' "$ssh_config"
         echo "Port $ssh_port" >> "$ssh_config"
         log_info "SSH port changed to $ssh_port"
     fi

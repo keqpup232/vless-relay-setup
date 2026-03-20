@@ -217,10 +217,13 @@ main() {
     log_info "=== Security Setup ==="
     local security_args=()
     [[ "$skip_ssh" == true ]] && security_args+=("--skip-ssh")
-    security_args+=(--ssh-port "$ssh_port" "$ssh_port":SSH 443:XRAY "$panel_port:3X-UI Panel")
+    security_args+=(--ssh-port "$ssh_port" "$ssh_port":SSH 443:XRAY)
     if [[ -n "$selfsteal_domain" ]]; then
         security_args+=(80:Caddy-ACME)
-    elif [[ -n "$sub_port" ]]; then
+    else
+        security_args+=("$panel_port:3X-UI Panel")
+    fi
+    if [[ -n "$sub_port" ]] && [[ -z "$selfsteal_domain" ]]; then
         # Only open sub_port directly when NOT using SelfSteal (Caddy proxies it otherwise)
         security_args+=("$sub_port:Subscription")
     fi

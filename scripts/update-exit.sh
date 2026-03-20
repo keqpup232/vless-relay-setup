@@ -128,7 +128,7 @@ main() {
     # --- Step 6: Security ---
     log_info "=== Security ==="
     local ssh_port
-    ssh_port=$(grep -E '^Port ' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}') || true
+    ssh_port=$(grep -E '^Port ' /etc/ssh/sshd_config 2>/dev/null | head -1 | awk '{print $2}') || true
     ssh_port="${ssh_port:-22}"
     log_info "Current SSH port: $ssh_port"
 
@@ -159,7 +159,9 @@ EXIT_XHTTP_PATH=$xhttp_path
 EOF
 
     # --- Step 8: Verify ---
-    verify_exit_server "${panel_port:-0}"
+    local selfsteal_domain=""
+    [[ "$is_selfsteal" == true ]] && selfsteal_domain="$server_name"
+    verify_exit_server "${panel_port:-0}" "$selfsteal_domain"
 
     # --- Done ---
     echo ""

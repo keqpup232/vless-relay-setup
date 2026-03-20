@@ -155,7 +155,7 @@ main() {
     # --- Step 6: Security ---
     log_info "=== Security ==="
     local ssh_port
-    ssh_port=$(grep -E '^Port ' /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}') || true
+    ssh_port=$(grep -E '^Port ' /etc/ssh/sshd_config 2>/dev/null | head -1 | awk '{print $2}') || true
     ssh_port="${ssh_port:-22}"
     log_info "Current SSH port: $ssh_port"
 
@@ -170,7 +170,13 @@ main() {
     setup_security "${security_args[@]}"
 
     # --- Step 7: Verify ---
-    verify_relay_server "$panel_port" "${sub_port:-}" "$exit_ip" "$exit_port"
+    local selfsteal_domain=""
+    if [[ "$is_selfsteal" == true ]]; then
+        selfsteal_domain=$(sqlite3 "$XUI_DB" \
+            "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';" | \
+            jq -r '.realitySettings.serverNames[0]') || true
+    fi
+    verify_relay_server "$panel_port" "${sub_port:-}" "$exit_ip" "$exit_port" "${selfsteal_domain:-}"
 
     # --- Done ---
     echo ""

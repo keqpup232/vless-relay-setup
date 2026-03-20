@@ -9,7 +9,7 @@ install_caddy() {
     log_info "Installing Caddy..."
 
     apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https curl > /dev/null 2>&1
-    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg 2>/dev/null
     curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | tee /etc/apt/sources.list.d/caddy-stable.list > /dev/null
     apt-get update -qq
     apt-get install -y -qq caddy > /dev/null 2>&1
@@ -48,13 +48,11 @@ generate_caddyfile() {
 
     # Global options — proxy_protocol MUST be scoped to unix socket server only.
     # Port 80 listener receives plain HTTP (no PROXY protocol).
-    # The "servers unix" key scopes listener_wrappers to the unix socket listener.
-    # NOTE: Verify exact Caddy v2 syntax for server key scoping during implementation.
-    # If "servers unix" does not work, use named server approach per Caddy docs.
+    # The server key must match the listener address (unix//path) per Caddy docs.
     cat > /etc/caddy/Caddyfile << CADDYEOF
 {
     auto_https disable_redirects
-    servers unix {
+    servers unix/${CADDY_SOCK} {
         listener_wrappers {
             proxy_protocol {
                 allow 127.0.0.1/32
