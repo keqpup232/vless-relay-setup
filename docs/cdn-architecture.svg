@@ -1,0 +1,111 @@
+<svg width="100%" viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg">
+<style>
+text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.h{font-size:14px;font-weight:600}
+.s{font-size:11.5px}
+.lb{font-size:10.5px;text-anchor:middle}
+
+.c1 rect{fill:#E1F5EE;stroke:#0F6E56;stroke-width:.75}
+.c1 .h{fill:#04342C} .c1 .s{fill:#0F6E56}
+.c2 rect{fill:#EEEDFE;stroke:#534AB7;stroke-width:.75}
+.c2 .h{fill:#26215C} .c2 .s{fill:#534AB7}
+.c3 rect{fill:#E6F1FB;stroke:#185FA5;stroke-width:.75}
+.c3 .h{fill:#042C53} .c3 .s{fill:#185FA5}
+.c4 rect{fill:#F1EFE8;stroke:#5F5E5A;stroke-width:.75}
+.c4 .h{fill:#2C2C2A}
+.c6 rect{fill:#FEF0E1;stroke:#D4760A;stroke-width:.75}
+.c6 .h{fill:#4A2800} .c6 .s{fill:#D4760A}
+.arr{stroke:#57606a;stroke-width:1.5;fill:none}
+.lb{fill:#57606a}
+.nt{fill:#8b949e;font-size:11px;text-anchor:middle}
+.tt{font-size:12px;font-weight:600}
+.sep{stroke:#57606a;stroke-width:.5;stroke-dasharray:4 4;opacity:.25}
+
+@media(prefers-color-scheme:dark){
+.c1 rect{fill:#085041;stroke:#5DCAA5} .c1 .h{fill:#E1F5EE} .c1 .s{fill:#9FE1CB}
+.c2 rect{fill:#3C3489;stroke:#AFA9EC} .c2 .h{fill:#EEEDFE} .c2 .s{fill:#CECBF6}
+.c3 rect{fill:#0C447C;stroke:#85B7EB} .c3 .h{fill:#E6F1FB} .c3 .s{fill:#B5D4F4}
+.c4 rect{fill:#444441;stroke:#B4B2A9} .c4 .h{fill:#F1EFE8}
+.c6 rect{fill:#5D3A00;stroke:#F5A623} .c6 .h{fill:#FEF0E1} .c6 .s{fill:#F5CF86}
+.arr{stroke:#8b949e} .lb{fill:#8b949e} .nt{fill:#656d76} .sep{stroke:#8b949e}
+}
+</style>
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M1 2L7 5L1 8" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="arr"/></marker>
+</defs>
+
+<!-- ===== Row 1: Reality path (main) ===== -->
+<text class="tt lb" x="360" y="18" style="fill:#0F6E56">Reality (primary, low latency)</text>
+
+<text class="lb" x="196" y="38">Reality TCP</text>
+<text class="lb" x="196" y="50">:443</text>
+<text class="lb" x="382" y="38">Reality XHTTP</text>
+<text class="lb" x="382" y="50">+ Fragment</text>
+<text class="lb" x="570" y="44">HTTP / TLS</text>
+
+<g class="c1">
+<rect x="18" y="58" width="110" height="48" rx="8"/>
+<text class="h" x="73" y="76" text-anchor="middle" dominant-baseline="central">Client</text>
+<text class="s" x="73" y="94" text-anchor="middle" dominant-baseline="central">Phone / PC</text>
+</g>
+
+<g class="c2">
+<rect x="228" y="58" width="118" height="48" rx="8"/>
+<text class="h" x="287" y="76" text-anchor="middle" dominant-baseline="central">Relay</text>
+<text class="s" x="287" y="94" text-anchor="middle" dominant-baseline="central">XRAY :443</text>
+</g>
+
+<g class="c3">
+<rect x="432" y="58" width="118" height="48" rx="8"/>
+<text class="h" x="491" y="76" text-anchor="middle" dominant-baseline="central">Exit</text>
+<text class="s" x="491" y="94" text-anchor="middle" dominant-baseline="central">XRAY :443</text>
+</g>
+
+<g class="c4">
+<rect x="606" y="60" width="100" height="44" rx="8"/>
+<text class="h" x="656" y="84" text-anchor="middle" dominant-baseline="central">Internet</text>
+</g>
+
+<line x1="130" y1="82" x2="226" y2="82" class="arr" marker-end="url(#a)"/>
+<line x1="348" y1="82" x2="430" y2="82" class="arr" marker-end="url(#a)"/>
+<line x1="552" y1="82" x2="604" y2="82" class="arr" marker-end="url(#a)"/>
+
+<!-- ===== Separator ===== -->
+<line x1="50" y1="122" x2="670" y2="122" class="sep"/>
+
+<!-- ===== Row 2: CDN Fallback path ===== -->
+<text class="tt lb" x="360" y="144" style="fill:#D4760A">CDN Fallback (backup, via Cloudflare)</text>
+
+<text class="lb" x="168" y="162">HTTPS</text>
+<text class="lb" x="168" y="174">WebSocket</text>
+<text class="lb" x="372" y="162">WS via</text>
+<text class="lb" x="372" y="174">Caddy</text>
+<text class="lb" x="570" y="168">HTTP / TLS</text>
+
+<g class="c1">
+<rect x="18" y="182" width="110" height="48" rx="8"/>
+<text class="h" x="73" y="200" text-anchor="middle" dominant-baseline="central">Client</text>
+<text class="s" x="73" y="218" text-anchor="middle" dominant-baseline="central">WebSocket</text>
+</g>
+
+<g class="c6">
+<rect x="218" y="182" width="138" height="48" rx="8"/>
+<text class="h" x="287" y="200" text-anchor="middle" dominant-baseline="central">Cloudflare CDN</text>
+<text class="s" x="287" y="218" text-anchor="middle" dominant-baseline="central">cdn-domain.com</text>
+</g>
+
+<g class="c3">
+<rect x="432" y="182" width="118" height="48" rx="8"/>
+<text class="h" x="491" y="200" text-anchor="middle" dominant-baseline="central">Exit</text>
+<text class="s" x="491" y="218" text-anchor="middle" dominant-baseline="central">Caddy + XRAY WS</text>
+</g>
+
+<g class="c4">
+<rect x="606" y="184" width="100" height="44" rx="8"/>
+<text class="h" x="656" y="208" text-anchor="middle" dominant-baseline="central">Internet</text>
+</g>
+
+<line x1="130" y1="206" x2="216" y2="206" class="arr" marker-end="url(#a)"/>
+<line x1="358" y1="206" x2="430" y2="206" class="arr" marker-end="url(#a)"/>
+<line x1="552" y1="206" x2="604" y2="206" class="arr" marker-end="url(#a)"/>
+</svg>

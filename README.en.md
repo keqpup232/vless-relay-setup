@@ -28,6 +28,18 @@ SelfSteal is fully optional — just press Enter during setup to skip it. When e
 
 ![SelfSteal architecture](./docs/selfsteal-architecture.svg)
 
+### CDN Fallback (optional)
+
+A backup route through Cloudflare CDN. If the direct path to the server is unavailable, traffic goes through CDN — the observer sees Cloudflare's IP, not your server's.
+
+![CDN comparison](./docs/cdn-comparison.svg)
+
+CDN Fallback is a backup channel. Reality remains the primary path (faster, lower overhead). The client receives both profiles via subscription and can switch when needed.
+
+![CDN architecture](./docs/cdn-architecture.svg)
+
+CDN Fallback requires SelfSteal (needs Caddy) and a separate domain connected to Cloudflare. Cloudflare setup is manual (instructions are shown during installation).
+
 ### DNS Filtering
 
 The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No client-side configuration needed.
@@ -37,6 +49,7 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
 ### Features
 
 - **VLESS + XTLS-Reality** — TLS 1.3 protocol with minimal overhead and SNI masking
+- **CDN Fallback** — backup route through Cloudflare for additional resilience
 - **TLS ClientHello fragmentation** — splits the first handshake packet for traffic analysis protection
 - **3X-UI panel** — web interface for user management, traffic limits, and monitoring
 - **Subscriptions** — automatic configuration updates on client devices
@@ -50,6 +63,7 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
   - Exit — remote server (different region or country)
 - **SSH keys** configured for both servers (the script disables password login)
 - **Domain** (optional) — for subscriptions and/or SelfSteal mode
+- **CDN Fallback domain** (optional) — separate domain connected to Cloudflare (free plan). Requires SelfSteal
 
 > **Important:** SSH keys must be configured before running the scripts.
 
@@ -108,7 +122,13 @@ Custom SSH port (Enter for default 22): ← SSH port
 Domain for SelfSteal SNI (Enter to skip): ← domain or Enter
 ```
 
-With SelfSteal enabled, the script will also install Caddy, issue an SSL certificate, and offer a choice of site content.
+With SelfSteal enabled, the script will also install Caddy, issue an SSL certificate, and offer a choice of site content. It will also ask about CDN Fallback:
+
+```
+CDN domain for Cloudflare (Enter to skip): ← CDN domain or Enter
+```
+
+If a CDN domain is provided, the script configures a WebSocket inbound and Caddy route. Cloudflare setup instructions are shown at the end.
 
 The script outputs connection parameters at the end — **save them** for relay setup:
 
