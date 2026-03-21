@@ -233,6 +233,7 @@ main() {
 
     if [[ -n "$cdn_domain" ]]; then
         patch_3xui_cdn_inbound "$cdn_sub_id"
+        sync_cdn_clients
     fi
 
     # Final restart: xray picks up patched config

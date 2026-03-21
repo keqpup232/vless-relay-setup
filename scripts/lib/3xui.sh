@@ -574,3 +574,68 @@ patch_3xui_cdn_inbound() {
 
     log_ok "CDN inbound patched (subId for subscriptions)"
 }
+
+sync_cdn_clients() {
+    log_info "Syncing clients to CDN inbound..."
+
+    # Check CDN inbound exists
+    local cdn_exists
+    cdn_exists=$(sqlite3 "$XUI_DB" \
+        "SELECT COUNT(*) FROM inbounds WHERE tag='inbound-cdn';") || true
+    if [[ "$cdn_exists" != "1" ]]; then
+        log_warn "CDN inbound not found, nothing to sync"
+        return 0
+    fi
+
+    # Get exit UUID from CDN inbound (it's the shared UUID for all CDN clients)
+    local exit_uuid
+    exit_uuid=$(sqlite3 "$XUI_DB" \
+        "SELECT settings FROM inbounds WHERE tag='inbound-cdn';" | \
+        jq -r '.clients[0].id') || true
+    if [[ -z "$exit_uuid" || "$exit_uuid" == "null" ]]; then
+        log_error "Cannot read exit UUID from CDN inbound"
+        return 1
+    fi
+
+    # Get all clients from relay inbound (subId + email)
+    local relay_clients
+    relay_clients=$(sqlite3 "$XUI_DB" \
+        "SELECT settings FROM inbounds WHERE tag='inbound-443';" | \
+        jq -c '[.clients[] | {subId: .subId, email: .email, enable: .enable}]') || true
+    if [[ -z "$relay_clients" || "$relay_clients" == "null" ]]; then
+        log_warn "No clients found in relay inbound"
+        return 0
+    fi
+
+    # Build new clients array: same subIds/emails but all with exit UUID
+    local cdn_clients
+    cdn_clients=$(echo "$relay_clients" | jq -c \
+        --arg uuid "$exit_uuid" \
+        '[.[] | {
+            id: $uuid,
+            email: (.email + "-cdn"),
+            limitIp: 0,
+            totalGB: 0,
+            expiryTime: 0,
+            enable: .enable,
+            subId: .subId,
+            tgId: "",
+            reset: 0
+        }]')
+
+    # Update CDN inbound settings with synced clients
+    local cdn_settings
+    cdn_settings=$(sqlite3 "$XUI_DB" \
+        "SELECT settings FROM inbounds WHERE tag='inbound-cdn';")
+    local updated_settings
+    updated_settings=$(echo "$cdn_settings" | jq -c \
+        --argjson clients "$cdn_clients" \
+        '.clients = $clients')
+    local s_settings="${updated_settings//\'/\'\'}"
+    sqlite3 "$XUI_DB" \
+        "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-cdn';"
+
+    local count
+    count=$(echo "$cdn_clients" | jq 'length')
+    log_ok "CDN inbound synced ($count clients)"
+}
