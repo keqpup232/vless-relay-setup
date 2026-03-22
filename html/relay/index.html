@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>disk.keqpup.online</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 900px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+        .header {
+            background: linear-gradient(135deg, #1e1e2f 0%, #2d2d44 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            border-bottom: 4px solid #4CAF50;
+        }
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+        .header h1 i {
+            color: #4CAF50;
+            margin-right: 10px;
+        }
+        .header .badge {
+            background: #4CAF50;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 50px;
+            display: inline-block;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            transition: transform 0.3s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        .stat-card i {
+            font-size: 2em;
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        .stat-card .value {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: #333;
+            margin: 10px 0 5px;
+        }
+        .stat-card .label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        .file-list {
+            padding: 30px;
+        }
+        .file-list h2 {
+            margin-bottom: 20px;
+            color: #333;
+            font-size: 1.5em;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            background: white;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.03);
+            transition: background 0.2s;
+        }
+        .file-item:hover {
+            background: #f5f5f5;
+        }
+        .file-item i {
+            font-size: 1.2em;
+            margin-right: 15px;
+            color: #4CAF50;
+        }
+        .file-item .name {
+            flex: 1;
+            font-weight: 500;
+            color: #333;
+        }
+        .file-item .size {
+            color: #666;
+            margin-right: 15px;
+            font-size: 0.9em;
+        }
+        .file-item .date {
+            color: #999;
+            font-size: 0.85em;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #666;
+            font-size: 0.9em;
+            border-top: 1px solid #e0e0e0;
+        }
+        .footer a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <i>📁</i> disk.keqpup.online
+            </h1>
+            <p>Secure cloud storage • Fast access • 100% uptime</p>
+            <div class="badge">SSL/TLS 1.3 Enabled ✓</div>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <i>💾</i>
+                <div class="value">234.5 GB</div>
+                <div class="label">Used space</div>
+            </div>
+            <div class="stat-card">
+                <i>📊</i>
+                <div class="value">1.2 TB</div>
+                <div class="label">Total capacity</div>
+            </div>
+            <div class="stat-card">
+                <i>📁</i>
+                <div class="value">1,847</div>
+                <div class="label">Files</div>
+            </div>
+        </div>
+
+        <div class="file-list">
+            <h2>Recent files</h2>
+            <div class="file-item">
+                <i>📄</i>
+                <span class="name">project-backup-2026-03-19.zip</span>
+                <span class="size">156.3 MB</span>
+                <span class="date">Today</span>
+            </div>
+            <div class="file-item">
+                <i>📸</i>
+                <span class="name">IMG_20260318_125432.jpg</span>
+                <span class="size">4.2 MB</span>
+                <span class="date">Yesterday</span>
+            </div>
+            <div class="file-item">
+                <i>🎵</i>
+                <span class="name">podcast-ep42-final.mp3</span>
+                <span class="size">45.8 MB</span>
+                <span class="date">2 days ago</span>
+            </div>
+            <div class="file-item">
+                <i>📁</i>
+                <span class="name">documents-2026</span>
+                <span class="size">2.1 GB</span>
+                <span class="date">3 days ago</span>
+            </div>
+            <div class="file-item">
+                <i>💻</i>
+                <span class="name">ubuntu-24.04-desktop.iso</span>
+                <span class="size">4.8 GB</span>
+                <span class="date">Last week</span>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2026 disk.keqpup.online • <a href="#">Terms</a> • <a href="#">Privacy</a> • <a href="#">Status</a></p>
+            <p style="margin-top: 10px; font-size: 0.8em;">TLS 1.3 | AES-256-GCM | Perfect Forward Secrecy</p>
+        </div>
+    </div>
+</body>
+</html>

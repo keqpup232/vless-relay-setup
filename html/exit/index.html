@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Видео-сервис | Скоро запуск</title>
+    <!-- Подключаем шрифты для современного вида -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,600;14..32,700;14..32,800&display=swap" rel="stylesheet">
+    <!-- Font Awesome 6 (бесплатные иконки) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(145deg, #0a0c10 0%, #11161f 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Анимированный фон с движущимися частицами */
+        .bg-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            overflow: hidden;
+            pointer-events: none;
+        }
+
+        .particle {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: floatParticle linear infinite;
+        }
+
+        @keyframes floatParticle {
+            0% {
+                transform: translateY(0) translateX(0) rotate(0deg);
+                opacity: 0;
+            }
+            10% {
+                opacity: 0.5;
+            }
+            90% {
+                opacity: 0.5;
+            }
+            100% {
+                transform: translateY(-100vh) translateX(20px) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        /* Главный контейнер */
+        .container {
+            position: relative;
+            z-index: 10;
+            max-width: 1200px;
+            width: 90%;
+            margin: 2rem auto;
+            padding: 2rem;
+            backdrop-filter: blur(2px);
+        }
+
+        /* Карточка заглушки */
+        .coming-soon-card {
+            background: rgba(15, 20, 30, 0.65);
+            backdrop-filter: blur(12px);
+            border-radius: 3rem;
+            padding: 3rem 2rem;
+            box-shadow: 0 25px 45px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.08);
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        .coming-soon-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 35px 55px rgba(0, 0, 0, 0.5);
+            border-color: rgba(255, 255, 255, 0.25);
+        }
+
+        /* Логотип / иконка */
+        .logo-icon {
+            font-size: 5rem;
+            color: #ff4d6d;
+            text-shadow: 0 0 15px rgba(255, 77, 109, 0.5);
+            margin-bottom: 1.2rem;
+            animation: pulseGlow 2s infinite alternate;
+        }
+
+        @keyframes pulseGlow {
+            0% {
+                text-shadow: 0 0 5px rgba(255, 77, 109, 0.4);
+            }
+            100% {
+                text-shadow: 0 0 25px rgba(255, 77, 109, 0.9);
+            }
+        }
+
+        h1 {
+            font-size: 3.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #FFFFFF, #cbd5e6);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            margin-bottom: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .tagline {
+            font-size: 1.2rem;
+            font-weight: 400;
+            color: #b9c7d9;
+            margin-bottom: 2rem;
+            border-bottom: 1px dashed rgba(255,255,255,0.2);
+            display: inline-block;
+            padding-bottom: 0.5rem;
+        }
+
+        .description {
+            max-width: 600px;
+            margin: 1.5rem auto;
+            font-size: 1rem;
+            line-height: 1.6;
+            color: #cfdfed;
+        }
+
+        /* Таймер обратного отсчета */
+        .countdown-wrapper {
+            margin: 2.5rem 0;
+        }
+
+        .countdown-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            font-weight: 600;
+            color: #ff8c9e;
+            margin-bottom: 1rem;
+        }
+
+        .countdown {
+            display: flex;
+            justify-content: center;
+            gap: 1.2rem;
+            flex-wrap: wrap;
+        }
+
+        .time-block {
+            background: rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(4px);
+            border-radius: 1.5rem;
+            padding: 0.8rem 1rem;
+            min-width: 90px;
+            text-align: center;
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.2s;
+        }
+
+        .time-number {
+            font-size: 2.4rem;
+            font-weight: 800;
+            font-family: monospace;
+            letter-spacing: 2px;
+            background: linear-gradient(to bottom, #fff, #e0eaff);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+        }
+
+        .time-label {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            font-weight: 500;
+            color: #b3c2d1;
+            margin-top: 0.3rem;
+        }
+
+        /* Форма уведомления */
+        .notify-section {
+            margin-top: 2.5rem;
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 2rem;
+            padding: 1.8rem;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .notify-text {
+            font-size: 0.95rem;
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+
+        .input-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.7rem;
+            justify-content: center;
+        }
+
+        .input-group input {
+            flex: 1;
+            min-width: 200px;
+            padding: 0.9rem 1.2rem;
+            border-radius: 3rem;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            color: white;
+            font-size: 0.9rem;
+            outline: none;
+            transition: all 0.2s;
+            border: 1px solid rgba(255,255,255,0.2);
+            font-family: 'Inter', sans-serif;
+        }
+
+        .input-group input:focus {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: #ff4d6d;
+            box-shadow: 0 0 8px rgba(255, 77, 109, 0.3);
+        }
+
+        .input-group input::placeholder {
+            color: rgba(220, 230, 245, 0.7);
+        }
+
+        .btn-subscribe {
+            background: linear-gradient(95deg, #ff4d6d, #ff1e4d);
+            border: none;
+            padding: 0.9rem 1.8rem;
+            border-radius: 3rem;
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: white;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(255, 30, 77, 0.3);
+            font-family: 'Inter', sans-serif;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-subscribe:hover {
+            transform: scale(1.02);
+            background: linear-gradient(95deg, #ff6380, #ff335d);
+            box-shadow: 0 6px 18px rgba(255, 30, 77, 0.5);
+        }
+
+        .btn-subscribe:active {
+            transform: scale(0.98);
+        }
+
+        .message-feedback {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: #b0ffb0;
+            background: rgba(0,0,0,0.4);
+            display: inline-block;
+            padding: 0.4rem 1rem;
+            border-radius: 30px;
+        }
+
+        /* Социальные ссылки */
+        .social-links {
+            margin-top: 2.5rem;
+            display: flex;
+            justify-content: center;
+            gap: 1.8rem;
+        }
+
+        .social-icon {
+            color: #b0c4de;
+            font-size: 1.7rem;
+            transition: all 0.2s;
+            opacity: 0.7;
+        }
+
+        .social-icon:hover {
+            opacity: 1;
+            color: #ff4d6d;
+            transform: translateY(-3px);
+        }
+
+        /* footer */
+        .footer-note {
+            margin-top: 2rem;
+            font-size: 0.75rem;
+            color: #6c7a8e;
+            text-align: center;
+        }
+
+        /* Адаптив */
+        @media (max-width: 680px) {
+            .coming-soon-card {
+                padding: 2rem 1.2rem;
+            }
+            h1 {
+                font-size: 2.2rem;
+            }
+            .time-block {
+                min-width: 65px;
+                padding: 0.5rem 0.6rem;
+            }
+            .time-number {
+                font-size: 1.8rem;
+            }
+            .logo-icon {
+                font-size: 3.5rem;
+            }
+            .countdown {
+                gap: 0.7rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .input-group {
+                flex-direction: column;
+            }
+            .btn-subscribe {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="bg-animation" id="particlesContainer"></div>
+
+<div class="container">
+    <div class="coming-soon-card">
+        <div class="logo-icon">
+            <i class="fas fa-video"></i>
+        </div>
+        <h1>video.keqpup.online</h1>
+        <div class="tagline">
+            <i class="fas fa-cog fa-spin" style="margin-right: 8px;"></i> Скоро здесь появится новый видеосервис
+        </div>
+        <div class="description">
+            Мы создаём удобную платформу для просмотра и обмена видео.
+            Уже совсем скоро вы сможете наслаждаться качественным контентом.
+            Оставьте email, чтобы узнать о запуске первыми!
+        </div>
+
+        <!-- Таймер обратного отсчета (условный запуск через 14 дней) -->
+        <div class="countdown-wrapper">
+            <div class="countdown-title">
+                <i class="far fa-clock"></i> ПЛАНИРУЕМЫЙ ЗАПУСК ЧЕРЕЗ
+            </div>
+            <div class="countdown" id="countdown">
+                <div class="time-block">
+                    <div class="time-number" id="days">00</div>
+                    <div class="time-label">Дней</div>
+                </div>
+                <div class="time-block">
+                    <div class="time-number" id="hours">00</div>
+                    <div class="time-label">Часов</div>
+                </div>
+                <div class="time-block">
+                    <div class="time-number" id="minutes">00</div>
+                    <div class="time-label">Минут</div>
+                </div>
+                <div class="time-block">
+                    <div class="time-number" id="seconds">00</div>
+                    <div class="time-label">Секунд</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Форма подписки на уведомление -->
+        <div class="notify-section">
+            <div class="notify-text">
+                <i class="fas fa-envelope"></i> Будьте в курсе:
+            </div>
+            <div class="input-group">
+                <input type="email" id="emailInput" placeholder="Ваш email адрес" autocomplete="email">
+                <button class="btn-subscribe" id="subscribeBtn">
+                    <i class="fas fa-bell"></i> Уведомить меня
+                </button>
+            </div>
+            <div id="feedbackMsg" class="message-feedback" style="display: none;"></div>
+        </div>
+
+        <!-- Социальные сети (декоративные) -->
+        <div class="social-links">
+            <a href="#" class="social-icon" aria-label="Telegram" id="socialTelegram"><i class="fab fa-telegram-plane"></i></a>
+            <a href="#" class="social-icon" aria-label="VK" id="socialVk"><i class="fab fa-vk"></i></a>
+            <a href="#" class="social-icon" aria-label="YouTube" id="socialYoutube"><i class="fab fa-youtube"></i></a>
+            <a href="#" class="social-icon" aria-label="Instagram" id="socialInsta"><i class="fab fa-instagram"></i></a>
+        </div>
+        <div class="footer-note">
+            © 2025 video.keqpup.online — готовим для вас лучший видео-опыт
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        // === 1. Анимированный фон с частицами ===
+        const particlesContainer = document.getElementById('particlesContainer');
+        const PARTICLE_COUNT = 65;
+
+        function createParticle() {
+            const particle = document.createElement('div');
+            particle.classList.add('particle');
+            const size = Math.random() * 6 + 2; // от 2px до 8px
+            particle.style.width = size + 'px';
+            particle.style.height = size + 'px';
+            particle.style.left = Math.random() * 100 + '%';
+            particle.style.top = Math.random() * 100 + '%';
+            const duration = Math.random() * 12 + 6; // 6-18 сек
+            particle.style.animationDuration = duration + 's';
+            particle.style.animationDelay = Math.random() * 8 + 's';
+            particle.style.opacity = Math.random() * 0.4 + 0.1;
+            particlesContainer.appendChild(particle);
+
+            // удаляем после окончания анимации, чтобы не засорять DOM, но пересоздаём позже
+            particle.addEventListener('animationend', () => {
+                particle.remove();
+                createParticle(); // регенерируем новую частицу
+            });
+        }
+
+        for(let i = 0; i < PARTICLE_COUNT; i++) {
+            createParticle();
+        }
+
+        // === 2. Обратный отсчет (дата запуска: через 14 дней от текущего момента) ===
+        // Устанавливаем дату запуска = текущая дата + 14 дней
+        let targetDate = new Date();
+        targetDate.setDate(targetDate.getDate() + 14);
+        targetDate.setHours(20, 0, 0, 0); // условно запуск в 20:00
+
+        // Для красоты: если дата уже прошла (например при быстром тесте) — добавим 1 день
+        function updateCountdown() {
+            const now = new Date().getTime();
+            const distance = targetDate.getTime() - now;
+
+            if (distance < 0) {
+                // если время истекло, устанавливаем новый дедлайн через 3 дня (небольшая заглушка, но сообщаем что уже запуск)
+                targetDate = new Date();
+                targetDate.setDate(targetDate.getDate() + 3);
+                targetDate.setHours(20, 0, 0, 0);
+                // Рекурсивно вызываем обновление (один раз сбросим, чтоб не зациклить лишнего)
+                updateCountdown();
+                return;
+            }
+
+            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+
+            document.getElementById('days').innerText = days < 10 ? '0' + days : days;
+            document.getElementById('hours').innerText = hours < 10 ? '0' + hours : hours;
+            document.getElementById('minutes').innerText = minutes < 10 ? '0' + minutes : minutes;
+            document.getElementById('seconds').innerText = seconds < 10 ? '0' + seconds : seconds;
+        }
+
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+
+        // === 3. Логика подписки (имитация отправки, без реального бэкенда, но с localStorage и валидацией) ===
+        const emailInput = document.getElementById('emailInput');
+        const subscribeBtn = document.getElementById('subscribeBtn');
+        const feedbackMsg = document.getElementById('feedbackMsg');
+
+        // простая валидация email
+        function isValidEmail(email) {
+            const re = /^[^\s@]+@([^\s@]+\.)+[^\s@]+$/;
+            return re.test(email);
+        }
+
+        // отображаем сообщение с таймаутом
+        function showMessage(text, isError = false) {
+            feedbackMsg.style.display = 'block';
+            feedbackMsg.innerHTML = isError ? '<i class="fas fa-exclamation-circle"></i> ' + text : '<i class="fas fa-check-circle"></i> ' + text;
+            feedbackMsg.style.color = isError ? '#ffb3b3' : '#b9ffbc';
+            feedbackMsg.style.background = isError ? 'rgba(80,0,0,0.6)' : 'rgba(0,80,30,0.6)';
+            setTimeout(() => {
+                feedbackMsg.style.display = 'none';
+            }, 3500);
+        }
+
+        // загружаем уже подписанные email из localStorage (имитация базы)
+        let subscribedEmails = [];
+        try {
+            const stored = localStorage.getItem('keqpup_notify_emails');
+            if(stored) {
+                subscribedEmails = JSON.parse(stored);
+            } else {
+                subscribedEmails = [];
+            }
+        } catch(e) { subscribedEmails = []; }
+
+        function saveEmailsToStorage() {
+            localStorage.setItem('keqpup_notify_emails', JSON.stringify(subscribedEmails));
+        }
+
+        subscribeBtn.addEventListener('click', () => {
+            const email = emailInput.value.trim();
+            if(!email) {
+                showMessage('Пожалуйста, введите email адрес', true);
+                return;
+            }
+            if(!isValidEmail(email)) {
+                showMessage('Введите корректный email (например, name@domain.ru)', true);
+                return;
+            }
+            // проверка на дубликат
+            if(subscribedEmails.includes(email)) {
+                showMessage('Этот email уже подписан на уведомления! Спасибо за интерес :)', false);
+                emailInput.value = '';
+                return;
+            }
+            // добавляем
+            subscribedEmails.push(email);
+            saveEmailsToStorage();
+            showMessage(`Спасибо, ${email}! Мы сообщим вам о запуске video.keqpup.online.`, false);
+            emailInput.value = '';
+            // дополнительно имитируем отправку на "сервер" (просто в консоль)
+            console.log('[DEMO] Уведомление для: ', email, 'Все подписанные:', subscribedEmails);
+        });
+
+        // Также добавим Enter в поле ввода
+        emailInput.addEventListener('keypress', (e) => {
+            if(e.key === 'Enter') {
+                e.preventDefault();
+                subscribeBtn.click();
+            }
+        });
+
+        // === 4. Социальные ссылки (демо-заглушка, просто алерт или открытие фейковых окон с предупреждением) ===
+        const socialTelegram = document.getElementById('socialTelegram');
+        const socialVk = document.getElementById('socialVk');
+        const socialYoutube = document.getElementById('socialYoutube');
+        const socialInsta = document.getElementById('socialInsta');
+
+        function socialHandler(platform) {
+            return (e) => {
+                e.preventDefault();
+                // Показываем информационное сообщение, тк ресурс ещё не запущен
+                showMessage(`Официальные сообщества ${platform} будут доступны после запуска проекта. Следите за новостями!`, false);
+            };
+        }
+
+        socialTelegram.addEventListener('click', socialHandler('Telegram'));
+        socialVk.addEventListener('click', socialHandler('ВКонтакте'));
+        socialYoutube.addEventListener('click', socialHandler('YouTube'));
+        socialInsta.addEventListener('click', socialHandler('Instagram'));
+
+        // === 5. Динамический заголовок + эффект при фокусе (необязательно) ===
+        // Добавим простой анимированный favicon / смена заголовка?
+        let originalTitle = document.title;
+        let attentionInterval;
+        function startAttention() {
+            let count = 0;
+            attentionInterval = setInterval(() => {
+                if(document.hasFocus()) {
+                    if(attentionInterval) clearInterval(attentionInterval);
+                    document.title = originalTitle;
+                    return;
+                }
+                document.title = count % 2 === 0 ? "⚡ Скоро запуск! video.keqpup.online" : "🎬 Видеосервис уже близко";
+                count++;
+                if(count > 20) clearInterval(attentionInterval);
+            }, 1200);
+        }
+        window.addEventListener('blur', () => {
+            startAttention();
+        });
+        window.addEventListener('focus', () => {
+            if(attentionInterval) clearInterval(attentionInterval);
+            document.title = originalTitle;
+        });
+
+        // бонус: показываем приветствие в консоли (для разработчиков)
+        console.log('%c🚀 video.keqpup.online — сайт-заглушка | Ожидайте запуск видеоплатформы', 'color: #ff4d6d; font-size: 14px;');
+
+        // небольшая анимация при загрузке: плавное появление карточки
+        const card = document.querySelector('.coming-soon-card');
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+            card.style.transition = 'opacity 0.6s cubic-bezier(0.2, 0.9, 0.4, 1.1), transform 0.6s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, 100);
+    })();
+</script>
+</body>
+</html>
