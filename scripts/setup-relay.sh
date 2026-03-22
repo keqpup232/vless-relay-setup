@@ -166,7 +166,8 @@ main() {
             xui_db_set "subPort" "$sub_port"
             xui_db_set "subPath" "/$sub_path/"
             xui_db_set "subDomain" "$sub_domain"
-            # No issue_domain_cert — Caddy handles TLS
+            xui_db_set "subListen" "127.0.0.1"
+            # No issue_domain_cert — Caddy handles TLS termination
         fi
 
         x-ui start

@@ -93,9 +93,6 @@ https://${sub_domain} {
     reverse_proxy 127.0.0.1:${sub_port} {
         header_up X-Real-IP {remote_host}
         header_up X-Forwarded-Proto {scheme}
-        transport http {
-            tls_insecure_skip_verify
-        }
     }
 }
 CADDYEOF
