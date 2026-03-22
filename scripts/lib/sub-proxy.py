@@ -41,8 +41,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.send_error(502, "Upstream unavailable")
             return
 
-        # Browser → pass through HTML as-is (3X-UI subscription page with QR codes)
-        if is_browser or b"<!DOCTYPE" in body[:100] or b"<html" in body[:100]:
+        # Non-subscription content (HTML pages, CSS, JS, images) → pass through as-is
+        is_html = b"<!DOCTYPE" in body[:100] or b"<html" in body[:100]
+        is_sub = not is_browser and not is_html and "text/plain" in ct
+
+        if not is_sub:
             self.send_response(200)
             self.send_header("Content-Type", ct)
             self.send_header("Content-Length", str(len(body)))
@@ -50,7 +53,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        # App → append CDN link to base64 subscription
+        # Subscription response (base64) → append CDN link
         if CDN_LINK:
             try:
                 decoded = base64.b64decode(body).decode("utf-8", errors="replace")
@@ -60,7 +63,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 pass  # non-base64 response, return as-is
 
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Type", ct)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body if isinstance(body, bytes) else body.encode())
