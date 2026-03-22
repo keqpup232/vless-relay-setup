@@ -93,9 +93,10 @@ main() {
         export REALITY_DEST="$CADDY_SOCK"
         export REALITY_SERVER_NAME="$selfsteal_domain"
         generate_caddyfile "$selfsteal_domain"
-        # Caddy is NOT started here — port 80 must stay free for 3X-UI installer
-        # (its ACME HTTP-01 challenge needs port 80). start_caddy runs after install_3xui.
-        setup_caddy_systemd_dependency "xray"
+        # Caddy is NOT started yet — port 80 must stay free for 3X-UI installer
+        # (its ACME HTTP-01 challenge needs port 80).
+        # systemd dependency is also deferred: Wants=caddy.service would auto-start
+        # Caddy when XRAY restarts, defeating the purpose of delaying.
 
         configure_xray_exit 443 "$exit_uuid" "$REALITY_PRIVATE_KEY" \
             "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
@@ -116,9 +117,10 @@ main() {
     install_3xui
     configure_3xui "$panel_port" "$panel_path" "$admin_user" "$admin_pass"
 
-    # Start Caddy AFTER 3X-UI is installed (port 80 is now free)
+    # Start Caddy AFTER 3X-UI is installed, then add systemd dependency
     if [[ -n "$selfsteal_domain" ]]; then
         start_caddy
+        setup_caddy_systemd_dependency "xray"
     fi
 
     # --- Step 5: Security ---
