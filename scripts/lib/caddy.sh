@@ -252,8 +252,61 @@ SVCEOF
     log_ok "systemd: ${service} will start after caddy"
 }
 
+setup_sub_proxy() {
+    local sub_port="$1"
+    local cdn_vless_link="$2"
+    local proxy_port="$3"
+
+    log_info "Setting up subscription proxy for CDN..."
+
+    # Install the proxy script
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    install -m 0755 "$script_dir/sub-proxy.py" /usr/local/bin/sub-proxy.py
+
+    # Create systemd service
+    cat > /etc/systemd/system/sub-proxy.service << SVCEOF
+[Unit]
+Description=Subscription proxy (appends CDN link)
+After=x-ui.service
+
+[Service]
+Type=simple
+Environment=SUB_UPSTREAM=http://127.0.0.1:${sub_port}
+Environment=CDN_VLESS_LINK=${cdn_vless_link}
+Environment=SUB_PROXY_PORT=${proxy_port}
+ExecStart=/usr/bin/python3 /usr/local/bin/sub-proxy.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+    systemctl daemon-reload
+    systemctl enable sub-proxy
+    systemctl start sub-proxy
+
+    if systemctl is-active --quiet sub-proxy; then
+        log_ok "Subscription proxy running on 127.0.0.1:${proxy_port}"
+    else
+        log_error "Subscription proxy failed to start"
+        return 1
+    fi
+}
+
+uninstall_sub_proxy() {
+    systemctl stop sub-proxy 2>/dev/null || true
+    systemctl disable sub-proxy 2>/dev/null || true
+    rm -f /etc/systemd/system/sub-proxy.service 2>/dev/null || true
+    rm -f /usr/local/bin/sub-proxy.py 2>/dev/null || true
+    systemctl daemon-reload 2>/dev/null || true
+}
+
 uninstall_caddy() {
     log_info "Removing Caddy..."
+
+    uninstall_sub_proxy
 
     systemctl stop caddy 2>/dev/null || true
     systemctl disable caddy 2>/dev/null || true
