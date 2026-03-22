@@ -211,6 +211,8 @@ sudo ./scripts/setup.sh update-relay
 
 Keys, UUIDs, clients, and statistics are **preserved**. Only the configuration template is updated. A backup is created before each update with automatic rollback on failure.
 
+With CDN Fallback, `update-relay` automatically syncs the CDN link with the current exit UUID. If the exit UUID changes — just run `update-relay`, and subscriptions will update. Users only need to refresh the subscription in their app.
+
 To update binaries (XRAY, 3X-UI, Caddy), add `--upgrade`:
 
 ```bash
