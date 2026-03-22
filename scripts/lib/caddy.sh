@@ -264,6 +264,9 @@ setup_sub_proxy() {
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     install -m 0755 "$script_dir/sub-proxy.py" /usr/local/bin/sub-proxy.py
 
+    # Escape % for systemd (% is a specifier prefix in unit files)
+    local escaped_link="${cdn_vless_link//%/%%}"
+
     # Create systemd service
     cat > /etc/systemd/system/sub-proxy.service << SVCEOF
 [Unit]
@@ -273,7 +276,7 @@ After=x-ui.service
 [Service]
 Type=simple
 Environment=SUB_UPSTREAM=http://127.0.0.1:${sub_port}
-Environment=CDN_VLESS_LINK=${cdn_vless_link}
+Environment=CDN_VLESS_LINK=${escaped_link}
 Environment=SUB_PROXY_PORT=${proxy_port}
 ExecStart=/usr/bin/python3 /usr/local/bin/sub-proxy.py
 Restart=on-failure
