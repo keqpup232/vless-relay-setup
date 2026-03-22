@@ -205,6 +205,11 @@ start_caddy() {
     systemctl start caddy
 
     if systemctl is-active --quiet caddy; then
+        # XRAY (running as nobody) needs write access to the unix socket
+        # created by Caddy (running as root). Default socket mode is 0600.
+        if [[ -S "$CADDY_SOCK" ]]; then
+            chmod 0666 "$CADDY_SOCK"
+        fi
         log_ok "Caddy is running"
     else
         log_error "Caddy failed to start. Check: journalctl -u caddy"
