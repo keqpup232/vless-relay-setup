@@ -162,6 +162,44 @@ main() {
     fi
     log_ok "3X-UI restarted with updated template"
 
+    # --- Step 5b: Update CDN sub-proxy link if active ---
+    if systemctl is-active --quiet sub-proxy 2>/dev/null; then
+        log_info "Updating CDN subscription proxy..."
+        local cdn_env cdn_domain cdn_ws_path sub_upstream sub_proxy_port
+        cdn_env=$(grep 'CDN_VLESS_LINK=' /etc/systemd/system/sub-proxy.service 2>/dev/null) || true
+        if [[ -n "$cdn_env" ]]; then
+            cdn_domain=$(echo "$cdn_env" | grep -oP '(?<=@)[^:]+' | head -1)
+            cdn_ws_path=$(echo "$cdn_env" | grep -oP '(?<=path=%%2F)[^&]+' | head -1)
+            sub_upstream=$(grep 'SUB_UPSTREAM=' /etc/systemd/system/sub-proxy.service | head -1 | sed 's/.*SUB_UPSTREAM=//')
+            sub_proxy_port=$(grep 'SUB_PROXY_PORT=' /etc/systemd/system/sub-proxy.service | head -1 | sed 's/.*SUB_PROXY_PORT=//')
+            if [[ -n "$cdn_domain" && -n "$cdn_ws_path" && -n "$sub_upstream" && -n "$sub_proxy_port" ]]; then
+                local cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=ws&security=tls&path=%2F${cdn_ws_path}&host=${cdn_domain}&sni=${cdn_domain}#CDN%20Fallback"
+                local escaped_link="${cdn_vless_link//%/%%}"
+                # Rewrite entire service file (sed breaks on & in URLs)
+                cat > /etc/systemd/system/sub-proxy.service << SVCEOF
+[Unit]
+Description=Subscription proxy (appends CDN link)
+After=x-ui.service
+
+[Service]
+Type=simple
+Environment=SUB_UPSTREAM=${sub_upstream}
+Environment="CDN_VLESS_LINK=${escaped_link}"
+Environment=SUB_PROXY_PORT=${sub_proxy_port}
+ExecStart=/usr/bin/python3 /usr/local/bin/sub-proxy.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+                systemctl daemon-reload
+                systemctl restart sub-proxy
+                log_ok "CDN link updated with current exit UUID"
+            fi
+        fi
+    fi
+
     # --- Step 6: Security ---
     log_info "=== Security ==="
     local ssh_port
