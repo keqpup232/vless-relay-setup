@@ -1,6 +1,6 @@
 # VLESS Reality Relay — Self-Hosted Encrypted Tunnel
 
-Multi-hop encrypted tunnel with TLS 1.3 masking. Automated deployment on two VPS nodes.
+Self-hosted relay infrastructure for encrypted inter-node connectivity. Automated deployment on two VPS nodes.
 
 > **Legal Notice:** This project is intended for lawful use cases only — corporate network segmentation, privacy research, and infrastructure redundancy. Users are solely responsible for compliance with applicable local laws and regulations.
 
@@ -22,7 +22,7 @@ This architecture provides:
 
 ### SelfSteal SNI (optional)
 
-The default mode masks traffic as requests to a third-party domain (e.g., microsoft.com), but the server's IP doesn't belong to that domain. SelfSteal eliminates this mismatch: you point your own domain at the server, and Caddy serves a real website on it.
+SelfSteal mode aligns your server's domain, IP, and TLS certificate for consistent transport configuration. Caddy serves a real website on your domain, eliminating SNI/IP mismatch.
 
 ![SelfSteal comparison](./docs/selfsteal-comparison.svg)
 
@@ -32,7 +32,7 @@ SelfSteal is fully optional — just press Enter during setup to skip it. When e
 
 ### CDN Fallback (optional)
 
-A backup route through Cloudflare CDN. If the direct path to the server is unavailable, traffic goes through CDN — the observer sees Cloudflare's IP, not your server's.
+Traffic is routed through Cloudflare CDN, providing an alternative delivery path when direct connectivity is unavailable.
 
 ![CDN comparison](./docs/cdn-comparison.svg)
 
@@ -50,9 +50,9 @@ The exit node uses AdGuard DNS to filter ads and trackers at the DNS level. No c
 
 ### Features
 
-- **VLESS + XTLS-Reality** — TLS 1.3 protocol with minimal overhead and SNI masking
+- **VLESS + XTLS-Reality** — TLS 1.3 encrypted transport with minimal overhead
 - **Multi-tier CDN Fallback** — backup routes through Cloudflare with asymmetric mode
-- **Adaptive connection protection** — packet size randomization, connection rotation, multiplexing
+- **Adaptive connection protection** — packet padding and connection multiplexing
 - **3X-UI panel** — web interface for user management, traffic limits, and monitoring
 - **Subscriptions** — automatic configuration updates on client devices
 - **SSH hardening + fail2ban + UFW** — automated server security configuration
