@@ -44,8 +44,8 @@ generate_caddyfile() {
     local sub_domain="${4:-}"
     local sub_port="${5:-}"
     local cdn_domain="${6:-}"
-    local cdn_ws_path="${7:-}"
-    local cdn_ws_port="${8:-}"
+    local cdn_path="${7:-}"
+    local cdn_port="${8:-}"
 
     log_info "Generating Caddyfile..."
 
@@ -101,17 +101,13 @@ https://${sub_domain} {
 CADDYEOF
     fi
 
-    if [[ -n "$cdn_domain" && -n "$cdn_ws_path" && -n "$cdn_ws_port" ]]; then
+    if [[ -n "$cdn_domain" && -n "$cdn_path" && -n "$cdn_port" ]]; then
         cat >> /etc/caddy/Caddyfile << CADDYEOF
 
 https://${cdn_domain} {
     bind unix/${CADDY_SOCK}
-    @websocket {
-        path /${cdn_ws_path}
-        header Connection *Upgrade*
-        header Upgrade websocket
-    }
-    reverse_proxy @websocket 127.0.0.1:${cdn_ws_port}
+    @cdn path /${cdn_path}*
+    reverse_proxy @cdn 127.0.0.1:${cdn_port}
     root * /var/www/html/selfsteal
     file_server
 }
@@ -222,7 +218,7 @@ start_caddy() {
     fi
 
     systemctl enable caddy
-    systemctl start caddy
+    systemctl restart caddy
 
     if systemctl is-active --quiet caddy; then
         # XRAY (running as nobody) needs write access to the unix socket
@@ -256,6 +252,9 @@ setup_sub_proxy() {
     local sub_port="$1"
     local cdn_vless_link="$2"
     local proxy_port="$3"
+    local cdn_domain="${4:-}"
+    local cdn_path="${5:-}"
+    local cdn_vless_link_asym="${6:-}"
 
     log_info "Setting up subscription proxy for CDN..."
 
@@ -266,6 +265,7 @@ setup_sub_proxy() {
 
     # Escape % for systemd (% is a specifier prefix in unit files)
     local escaped_link="${cdn_vless_link//%/%%}"
+    local escaped_link_asym="${cdn_vless_link_asym//%/%%}"
 
     # Create systemd service
     cat > /etc/systemd/system/sub-proxy.service << SVCEOF
@@ -277,6 +277,9 @@ After=x-ui.service
 Type=simple
 Environment=SUB_UPSTREAM=http://127.0.0.1:${sub_port}
 Environment=CDN_VLESS_LINK=${escaped_link}
+Environment=CDN_VLESS_LINK_ASYM=${escaped_link_asym}
+Environment=CDN_DOMAIN=${cdn_domain}
+Environment=CDN_PATH=${cdn_path}
 Environment=SUB_PROXY_PORT=${proxy_port}
 ExecStart=/usr/bin/python3 /usr/local/bin/sub-proxy.py
 Restart=on-failure
