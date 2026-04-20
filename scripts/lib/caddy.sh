@@ -255,22 +255,34 @@ setup_sub_proxy() {
     local cdn_domain="${4:-}"
     local cdn_path="${5:-}"
     local cdn_vless_link_asym="${6:-}"
+    local direct_vless_link="${7:-}"
+    local hysteria_link="${8:-}"
+    local hysteria_port="${9:-}"
+    local hysteria_port_end="${10:-}"
+    local hysteria_obfs="${11:-}"
+    local relay_extra_encoded="${12:-}"
 
-    log_info "Setting up subscription proxy for CDN..."
+    log_info "Setting up subscription proxy..."
 
-    # Install the proxy script
+    # Install the proxy script and config templates
     local script_dir
     script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     install -m 0755 "$script_dir/sub-proxy.py" /usr/local/bin/sub-proxy.py
+    mkdir -p /etc/sub-proxy
+    install -m 0644 "$script_dir/templates/sr-module-ru.sgmodule" /etc/sub-proxy/sr-module-ru.sgmodule
+    install -m 0644 "$script_dir/templates/happ-routing-ru.json" /etc/sub-proxy/happ-routing-ru.json
 
     # Escape % for systemd (% is a specifier prefix in unit files)
     local escaped_link="${cdn_vless_link//%/%%}"
     local escaped_link_asym="${cdn_vless_link_asym//%/%%}"
+    local escaped_direct="${direct_vless_link//%/%%}"
+    local escaped_hysteria="${hysteria_link//%/%%}"
+    local escaped_relay_extra="${relay_extra_encoded//%/%%}"
 
     # Create systemd service
     cat > /etc/systemd/system/sub-proxy.service << SVCEOF
 [Unit]
-Description=Subscription proxy (appends CDN link)
+Description=Subscription proxy (appends extra links)
 After=x-ui.service
 
 [Service]
@@ -278,8 +290,14 @@ Type=simple
 Environment=SUB_UPSTREAM=http://127.0.0.1:${sub_port}
 Environment=CDN_VLESS_LINK=${escaped_link}
 Environment=CDN_VLESS_LINK_ASYM=${escaped_link_asym}
+Environment=DIRECT_VLESS_LINK=${escaped_direct}
+Environment=HYSTERIA_LINK=${escaped_hysteria}
+Environment=HYSTERIA_PORT=${hysteria_port}
+Environment=HYSTERIA_PORT_END=${hysteria_port_end}
+Environment=HYSTERIA_OBFS=${hysteria_obfs}
 Environment=CDN_DOMAIN=${cdn_domain}
 Environment=CDN_PATH=${cdn_path}
+Environment=RELAY_XHTTP_EXTRA=${escaped_relay_extra}
 Environment=SUB_PROXY_PORT=${proxy_port}
 ExecStart=/usr/bin/python3 /usr/local/bin/sub-proxy.py
 Restart=on-failure
@@ -306,6 +324,7 @@ uninstall_sub_proxy() {
     systemctl disable sub-proxy 2>/dev/null || true
     rm -f /etc/systemd/system/sub-proxy.service 2>/dev/null || true
     rm -f /usr/local/bin/sub-proxy.py 2>/dev/null || true
+    rm -rf /etc/sub-proxy 2>/dev/null || true
     systemctl daemon-reload 2>/dev/null || true
 }
 

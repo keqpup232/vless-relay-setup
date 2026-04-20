@@ -63,6 +63,14 @@ main() {
         validate_not_empty "$cdn_path" "CDN path" || exit 1
     fi
 
+    local hysteria_port="" hysteria_port_end="" hysteria_obfs=""
+    prompt_input "Exit Hysteria 2 port (Enter if not configured)" hysteria_port ""
+    if [[ -n "$hysteria_port" ]]; then
+        prompt_input "Exit Hysteria 2 port range end" hysteria_port_end "$((hysteria_port + 1000))"
+        prompt_input "Exit Hysteria 2 obfs password" hysteria_obfs
+        validate_not_empty "$hysteria_obfs" "Hysteria obfs password" || exit 1
+    fi
+
     # Validate exit server inputs
     validate_ip "$exit_ip" || { log_error "Invalid IP address: $exit_ip"; exit 1; }
     validate_uuid "$exit_uuid" || { log_error "Invalid UUID format: $exit_uuid"; exit 1; }
@@ -187,48 +195,68 @@ main() {
 
         x-ui start
 
-        # CDN subscription proxy: sits between Caddy and 3X-UI subscription,
-        # appends the correct CDN VLESS link to every subscription response.
+        # Subscription proxy: sits between Caddy and 3X-UI subscription,
+        # appends extra links (CDN, Direct Exit, Hysteria) to every subscription response.
         # Must be set up BEFORE Caddyfile generation so Caddy gets the proxy port.
         local caddy_sub_port="$sub_port"
-        if [[ -n "$cdn_domain" && -n "$sub_port" ]]; then
-            # Symmetric XHTTP CDN link
-            local cdn_vless_link sub_proxy_port
-            cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
+        if [[ -n "$sub_port" ]] && [[ -n "$cdn_domain" || -n "$hysteria_port" ]]; then
+            local cdn_vless_link="" cdn_vless_link_asym="" sub_proxy_port
 
-            # Asymmetric CDN link with downloadSettings
-            local cdn_vless_link_asym="" download_extra extra_encoded
-            download_extra=$(jq -n -c \
-                --arg padding "100-1000" \
-                --arg exit_addr "$exit_ip" \
-                --arg exit_sni_val "$exit_sni" \
-                --arg exit_pubkey_val "$exit_pubkey" \
-                --arg exit_short_id_val "$exit_short_id" \
-                --arg exit_path "$exit_xhttp_path" \
-                '{
-                    xPaddingBytes: $padding,
-                    downloadSettings: {
-                        address: $exit_addr,
-                        port: 443,
-                        network: "xhttp",
-                        security: "reality",
-                        realitySettings: {
-                            serverName: $exit_sni_val,
-                            publicKey: $exit_pubkey_val,
-                            shortId: $exit_short_id_val,
-                            fingerprint: "chrome"
-                        },
-                        xhttpSettings: {
-                            path: ("/"+$exit_path),
-                            mode: "auto"
+            # CDN links — only when CDN Fallback is configured
+            if [[ -n "$cdn_domain" ]]; then
+                # Symmetric XHTTP CDN link
+                cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
+
+                # Asymmetric CDN link with downloadSettings
+                local download_extra extra_encoded
+                download_extra=$(jq -n -c \
+                    --arg padding "100-1000" \
+                    --arg exit_addr "$exit_ip" \
+                    --arg exit_sni_val "$exit_sni" \
+                    --arg exit_pubkey_val "$exit_pubkey" \
+                    --arg exit_short_id_val "$exit_short_id" \
+                    --arg exit_path "$exit_xhttp_path" \
+                    '{
+                        xPaddingBytes: $padding,
+                        downloadSettings: {
+                            address: $exit_addr,
+                            port: 443,
+                            network: "xhttp",
+                            security: "reality",
+                            realitySettings: {
+                                serverName: $exit_sni_val,
+                                publicKey: $exit_pubkey_val,
+                                shortId: $exit_short_id_val,
+                                fingerprint: "chrome"
+                            },
+                            xhttpSettings: {
+                                path: ("/"+$exit_path),
+                                mode: "auto"
+                            }
                         }
-                    }
-                }')
-            extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
-            cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+                    }')
+                extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
+                cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+            fi
+
+            # Direct exit link (no relay, fastest path) — always available
+            local direct_vless_link
+            direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto#Direct%20Exit"
+
+            # Hysteria 2 link — only when Hysteria is configured
+            local hysteria_link=""
+            if [[ -n "$hysteria_port" ]]; then
+                hysteria_link="hysteria2://${exit_uuid}@${exit_ip}:${hysteria_port},${hysteria_port}-${hysteria_port_end}/?obfs=salamander&obfs-password=${hysteria_obfs}&sni=${exit_sni}&insecure=0#Hysteria%202"
+            fi
+
+            # URL-encoded XHTTP extra — sub-proxy injects into each relay VLESS URL
+            # since 3X-UI's built-in subscription generator does not emit extra=.
+            local relay_extra_json relay_extra_encoded
+            relay_extra_json=$(xhttp_extra_json)
+            relay_extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$relay_extra_json")
 
             sub_proxy_port=$((sub_port + 1))
-            setup_sub_proxy "$sub_port" "$cdn_vless_link" "$sub_proxy_port" "$cdn_domain" "$cdn_path" "$cdn_vless_link_asym"
+            setup_sub_proxy "$sub_port" "$cdn_vless_link" "$sub_proxy_port" "$cdn_domain" "$cdn_path" "$cdn_vless_link_asym" "$direct_vless_link" "$hysteria_link" "$hysteria_port" "$hysteria_port_end" "$hysteria_obfs" "$relay_extra_encoded"
             caddy_sub_port="$sub_proxy_port"
         fi
 
@@ -252,13 +280,15 @@ main() {
     # Create relay inbound and xray template (all DB writes)
     local default_sub_id
     default_sub_id=$(head -c 8 /dev/urandom | xxd -p)
+    local relay_xhttp_path
+    relay_xhttp_path=$(generate_random_path)
 
     local xver=0
     [[ -n "$selfsteal_domain" ]] && xver=1
 
     create_3xui_relay_inbound "$relay_uuid" "$REALITY_PRIVATE_KEY" \
         "$REALITY_PUBLIC_KEY" "$REALITY_SHORT_ID" "$REALITY_DEST" "$REALITY_SERVER_NAME" \
-        "$default_sub_id" "$exit_ip" "$xver"
+        "$default_sub_id" "$exit_ip" "$xver" "$relay_xhttp_path"
 
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
         "$exit_pubkey" "$exit_short_id" "$exit_sni" "$exit_xhttp_path"
@@ -303,7 +333,7 @@ main() {
     echo "==========================================="
     echo ""
     echo "  Server:    ${server_ip}"
-    echo "  Protocol:  VLESS + Reality (TCP) → Exit (XHTTP)"
+    echo "  Protocol:  VLESS + Reality (XHTTP) → Exit (XHTTP)"
     echo "  Port:      443"
     echo "  Exit:      ${exit_ip}"
     echo ""
@@ -355,6 +385,10 @@ main() {
         echo "  CDN VLESS link (for manual client setup):"
         echo "-------------------------------------------"
         echo "  $cdn_display_link"
+        echo ""
+    fi
+    if [[ -n "$hysteria_port" ]]; then
+        echo "  Hysteria 2:  UDP ${hysteria_port}-${hysteria_port_end} via ${exit_ip}"
         echo ""
     fi
     if [[ "$ssh_port" != "22" ]]; then

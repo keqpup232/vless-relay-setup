@@ -42,17 +42,54 @@ CDN Fallback поддерживает два режима. В асимметри
 
 CDN Fallback требует SelfSteal (нужен Caddy) и отдельный домен, подключённый к Cloudflare. Настройка Cloudflare — ручная (инструкция выводится при установке).
 
+### Direct Exit (автоматически)
+
+Прямое подключение к exit-серверу без прохождения через relay. Один хоп вместо двух — минимальная задержка. Ссылка добавляется в подписку автоматически с самым низким приоритетом: клиент использует её только если relay и CDN недоступны.
+
+```
+Подписка (порядок приоритета):
+  ① Relay → Exit          основной
+  ② CDN Asymmetric        резерв (быстрый)
+  ③ CDN Symmetric         резерв (устойчивый)
+  ④ Hysteria 2            UDP-канал (Salamander + port hopping)
+  ⑤ Direct Exit           самый быстрый, но менее надёжный
+```
+
+> Split routing настраивается в клиентском приложении и работает с любым из этих каналов.
+
+### Hysteria 2 (опционально)
+
+UDP-канал через протокол Hysteria 2. Работает поверх QUIC с обфускацией Salamander (трафик неотличим от случайных данных) и port hopping (клиент переключается между портами каждые несколько секунд). Устойчив к блокировке UDP — нет фиксированного порта и нет характерных QUIC-заголовков.
+
+Требует SelfSteal (нужен TLS-сертификат). Ссылка добавляется в подписку автоматически. Hysteria 2 работает как отдельный процесс рядом с XRAY — два канала полностью независимы.
+
 ### DNS-фильтрация
 
 Exit-нода использует AdGuard DNS для фильтрации рекламы и трекеров на уровне DNS. Клиентам ничего настраивать не нужно.
 
 ![DNS-фильтрация](./docs/dns-filtering.svg)
 
+### Split Routing (раздельная маршрутизация)
+
+Некоторые российские сервисы (банки, госсервисы, маркетплейсы) могут некорректно работать при подключении с иностранного IP-адреса. Split routing решает эту проблему: трафик к российским ресурсам идёт напрямую через домашнего провайдера, а всё остальное — через VPN.
+
+```
+Подписка + split routing:
+  YouTube, Instagram, Discord  → через VPN (обход замедления)
+  Сбер, Госуслуги, Яндекс, VK → напрямую (домашний IP)
+```
+
+Настройка зависит от клиентского приложения — у каждого свой формат правил маршрутизации (пресеты, remote config, ручные правила). Для Shadowrocket sub-proxy отдаёт готовые конфиги по URL подписки с параметром `?conf=ru` (российские ресурсы напрямую) или `?conf=full` (весь трафик через VPN).
+
+Split routing не требует дополнительной настройки сервера — это функция клиентских приложений.
+
 ### Возможности
 
-- **VLESS + XTLS-Reality** — протокол с TLS 1.3 и минимальным оверхедом
+- **VLESS + XTLS-Reality + XHTTP** — сквозное шифрование TLS 1.3 с XHTTP-транспортом на обоих хопах
 - **Многоуровневый CDN Fallback** — резервные маршруты через Cloudflare с асимметричным режимом
 - **Адаптивная защита соединений** — паддинг пакетов и мультиплексирование соединений
+- **Hysteria 2 (UDP)** — резервный канал с обфускацией Salamander и port hopping
+- **Split Routing** — раздельная маршрутизация: российские сервисы напрямую, остальное через VPN. Готовые конфиги для Shadowrocket (`?conf=ru`)
 - **3X-UI панель** — веб-интерфейс для управления пользователями, лимитами трафика и мониторинга
 - **Подписки** — автоматическое обновление конфигурации на клиентских устройствах
 - **SSH hardening + fail2ban + UFW** — автоматическая настройка безопасности серверов
@@ -128,9 +165,10 @@ Domain for SelfSteal SNI (Enter to skip): ← домен или Enter
 
 ```
 CDN domain for Cloudflare (Enter to skip): ← домен для CDN или Enter
+Hysteria 2 UDP port (Enter to skip):      ← порт для Hysteria 2 или Enter
 ```
 
-Если указать CDN-домен, скрипт настроит CDN-маршрут через Caddy. В конце выведет инструкцию по настройке Cloudflare.
+Если указать CDN-домен, скрипт настроит CDN-маршрут через Caddy. В конце выведет инструкцию по настройке Cloudflare. Hysteria 2 устанавливается как отдельный процесс рядом с XRAY (UDP, port hopping + Salamander).
 
 В конце скрипт выведет параметры подключения — **сохраните их** для настройки relay:
 
@@ -186,12 +224,45 @@ Domain for subscriptions (Enter to skip):        ← поддомен для п�
 
 Передайте пользователю subscription-ссылку. В приложении: **Подписки → Добавить → Обновить → Подключиться**.
 
-| Платформа | Приложение | Где скачать |
-|-----------|-----------|------------|
-| iOS | Streisand | [App Store](https://apps.apple.com/app/streisand/id6450534064) |
-| Android | v2rayNG | [GitHub](https://github.com/2dust/v2rayNG) |
-| Windows | v2rayN | [GitHub](https://github.com/2dust/v2rayN) |
-| macOS | V2BOX | [App Store](https://apps.apple.com/app/v2box-v2ray-client/id6446814690) |
+| Платформа | Приложение | Где скачать | Split routing |
+|-----------|-----------|------------|---------------|
+| Android | v2rayNG | [GitHub](https://github.com/2dust/v2rayNG) | Settings → Routing → preset Russia |
+| Android | Happ | [GitHub](https://github.com/Happ-proxy/happ-android) | Routing → добавить RU profile |
+| iOS | Shadowrocket | [App Store](https://apps.apple.com/app/shadowrocket/id932747118) | Config → Remote → `?conf=ru` |
+| iOS | Happ | [App Store](https://apps.apple.com/us/app/happ-proxy-utility/id6504287215) | Routing → добавить RU profile |
+| iOS | Streisand | [App Store](https://apps.apple.com/app/streisand/id6450534064) | Routing rules в UI |
+| Windows | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
+| macOS | v2rayN | [GitHub](https://github.com/2dust/v2rayN) | Settings → Regional presets → Russia |
+
+### Шаг 5. Split Routing (опционально)
+
+Чтобы российские сервисы (банки, госсервисы, маркетплейсы) работали корректно, настройте раздельную маршрутизацию в клиентском приложении:
+
+**v2rayN** (Windows / macOS / Linux):
+1. Settings → Regional presets → Russia
+2. Выбрать «All, except RU»
+3. Готово — российские сайты идут напрямую, остальное через VPN
+
+**v2rayNG** (Android):
+1. Settings → Routing Settings
+2. Выбрать пресет Russia или импортировать правила
+3. Готово
+
+**Happ** (Android / iOS / десктоп):
+1. Открыть раздел Routing (меню ⊙ в правом верхнем углу)
+2. Включить «Use routing»
+3. Добавить profile — вручную или через deeplink с [roscomvpn-routing](https://github.com/hydraponique/roscomvpn-routing)
+
+**Shadowrocket** (iOS):
+1. Добавить подписку как обычно (серверы)
+2. Config → нажать **+** → Remote Files
+3. Вставить URL подписки с параметром `?conf=ru`, например: `https://sub.example.com/sub/path/?conf=ru`
+4. Скачать → выбрать этот конфиг → Global Routing: Config
+5. Для переключения на «всё через VPN» — заменить `?conf=ru` на `?conf=full`
+
+**Streisand** (iOS):
+1. Настройки → Routing → добавить правила вручную
+2. Добавить: `GEOIP,RU,DIRECT` и `DOMAIN-SUFFIX,ru,DIRECT`
 
 ## Структура проекта
 
@@ -214,6 +285,17 @@ sudo ./scripts/setup.sh update-relay
 Ключи, UUID, клиенты и статистика **сохраняются**. Обновляется только шаблон конфигурации. Перед обновлением создаётся резервная копия с автоматическим откатом при ошибке.
 
 При CDN Fallback `update-relay` автоматически синхронизирует CDN-ссылку с текущим exit UUID. Если UUID exit-сервера изменился — достаточно запустить `update-relay`, и подписки обновятся. Пользователям нужно только нажать "Обновить" в приложении.
+
+Если Hysteria 2 был добавлен на exit после первоначальной настройки relay, передайте параметры через `update-relay`:
+
+```bash
+sudo ./scripts/setup.sh update-relay \
+  --hysteria-port 34821 \
+  --hysteria-port-end 35821 \
+  --hysteria-obfs mypassword
+```
+
+Значения — из `exit-server-info.txt`. `--hysteria-port-end` можно не указывать (по умолчанию port + 1000).
 
 Для обновления бинарников (XRAY, 3X-UI, Caddy) добавьте `--upgrade`:
 
@@ -252,6 +334,9 @@ x-ui log
 | `--skip-ssh` | setup, update | Не менять конфигурацию SSH |
 | `--upgrade` | update | Обновить бинарники (XRAY, 3X-UI, Caddy) |
 | `--purge-certs` | uninstall | Удалить SSL-сертификаты и acme.sh |
+| `--hysteria-port` | update-relay | Порт Hysteria 2 на exit-сервере |
+| `--hysteria-port-end` | update-relay | Конец диапазона портов (по умолчанию port + 1000) |
+| `--hysteria-obfs` | update-relay | Пароль обфускации Salamander |
 
 ## Безопасность
 

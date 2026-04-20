@@ -11,11 +11,16 @@ source "$SCRIPT_DIR/lib/caddy.sh"
 
 main() {
     local upgrade=false skip_ssh=false
-    for arg in "$@"; do
-        case "$arg" in
+    local arg_hy_port="" arg_hy_port_end="" arg_hy_obfs=""
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
             --upgrade) upgrade=true ;;
             --skip-ssh) skip_ssh=true ;;
+            --hysteria-port) arg_hy_port="$2"; shift ;;
+            --hysteria-port-end) arg_hy_port_end="$2"; shift ;;
+            --hysteria-obfs) arg_hy_obfs="$2"; shift ;;
         esac
+        shift
     done
 
     echo "==========================================="
@@ -106,6 +111,17 @@ main() {
         log_info "CDN mode detected"
     fi
 
+    # Detect current relay inbound transport (TCP or XHTTP)
+    local current_network
+    current_network=$(sqlite3 "$XUI_DB" \
+        "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';" | \
+        jq -r '.network') || true
+    if [[ "$current_network" == "xhttp" ]]; then
+        log_info "XHTTP inbound detected"
+    else
+        log_info "TCP inbound detected — will migrate to XHTTP"
+    fi
+
     # --- Step 3: System update ---
     log_info "=== System Update ==="
     update_system
@@ -144,6 +160,69 @@ main() {
         log_ok "Inbound sniffing patched (routeOnly: true)"
     fi
 
+    # Precompute XHTTP extra block (xmux + padding + flow control) — shared helper.
+    local extra_json
+    extra_json=$(xhttp_extra_json)
+
+    # Migrate TCP inbound to XHTTP if still on TCP
+    if [[ "$current_network" != "xhttp" ]]; then
+        local relay_xhttp_path
+        relay_xhttp_path=$(generate_random_path)
+        log_info "Migrating relay inbound to XHTTP (path: $relay_xhttp_path)..."
+
+        local current_stream patched_stream
+        current_stream=$(sqlite3 "$XUI_DB" \
+            "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';")
+        # Write xhttpSettings complete with extra in a single pass —
+        # prevents fragility if the post-migration patch block is skipped/reordered.
+        patched_stream=$(echo "$current_stream" | jq -c \
+            --arg relay_path "$relay_xhttp_path" \
+            --argjson extra "$extra_json" \
+            '.network = "xhttp"
+            | .xhttpSettings = {
+                path: ("/"+$relay_path),
+                mode: "auto",
+                extra: $extra
+            }
+            | del(.tcpSettings)')
+        local s_stream="${patched_stream//\'/\'\'}"
+        sqlite3 "$XUI_DB" \
+            "UPDATE inbounds SET stream_settings='${s_stream}' WHERE tag='inbound-443';"
+        # Clear flow from all clients — flow is incompatible with XHTTP
+        # (Shadowrocket and other clients connect without flow on XHTTP)
+        local current_settings patched_settings
+        current_settings=$(sqlite3 "$XUI_DB" \
+            "SELECT settings FROM inbounds WHERE tag='inbound-443';")
+        patched_settings=$(echo "$current_settings" | jq -c \
+            '.clients = [.clients[] | .flow = ""]')
+        local s_settings="${patched_settings//\'/\'\'}"
+        sqlite3 "$XUI_DB" \
+            "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-443';"
+
+        log_ok "Relay inbound migrated from TCP to XHTTP"
+    fi
+
+    # Idempotent patch of XHTTP extra on existing installs (already on XHTTP before this run).
+    # Ensures current recommended values are applied on every update — needed for
+    # TSPU TLS-policing resistance on client→relay leg (XTLS issue #5332).
+    local current_inbound_stream updated_inbound_stream
+    current_inbound_stream=$(sqlite3 "$XUI_DB" \
+        "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';") || true
+    if [[ -n "$current_inbound_stream" && \
+          "$(echo "$current_inbound_stream" | jq -r '.network')" == "xhttp" ]]; then
+        updated_inbound_stream=$(echo "$current_inbound_stream" | jq -c \
+            --argjson extra "$extra_json" \
+            '.xhttpSettings.extra = $extra')
+        if [[ -z "$updated_inbound_stream" ]]; then
+            log_error "jq failed to patch XHTTP extra on inbound (input malformed?)"
+            exit 1
+        fi
+        local s_inbound_stream="${updated_inbound_stream//\'/\'\'}"
+        sqlite3 "$XUI_DB" \
+            "UPDATE inbounds SET stream_settings='${s_inbound_stream}' WHERE tag='inbound-443';"
+        log_ok "XHTTP inbound extra block patched (xmux + padding)"
+    fi
+
     configure_3xui_relay_template "$exit_ip" "$exit_port" "$exit_uuid" \
         "$exit_pubkey" "$exit_short_id" "$exit_sni" "$exit_xhttp_path" "$api_port"
 
@@ -162,15 +241,18 @@ main() {
     fi
     log_ok "3X-UI restarted with updated template"
 
-    # --- Step 5b: Update CDN links in sub-proxy if active ---
+    # --- Step 5b: Update extra links in sub-proxy if active ---
     local sub_proxy_service="/etc/systemd/system/sub-proxy.service"
-    if [[ -f "$sub_proxy_service" ]] && systemctl is-active --quiet sub-proxy 2>/dev/null; then
-        log_info "Updating CDN links in sub-proxy..."
+    if [[ -f "$sub_proxy_service" ]]; then
+        log_info "Updating links in sub-proxy..."
 
-        # Update sub-proxy script from codebase
+        # Update sub-proxy script and config templates from codebase
         local script_dir
         script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         install -m 0755 "$script_dir/lib/sub-proxy.py" /usr/local/bin/sub-proxy.py
+        mkdir -p /etc/sub-proxy
+        install -m 0644 "$script_dir/lib/templates/sr-conf-ru.conf" /etc/sub-proxy/sr-conf-ru.conf 2>/dev/null || true
+        install -m 0644 "$script_dir/lib/templates/sr-conf-full.conf" /etc/sub-proxy/sr-conf-full.conf 2>/dev/null || true
 
         # Read CDN params — prefer dedicated env vars, fall back to old URL parsing
         local cdn_domain cdn_path
@@ -182,41 +264,91 @@ main() {
             cdn_path=$(grep 'CDN_VLESS_LINK=' "$sub_proxy_service" | grep -oP '(?<=path=%%2F)[^&]+' | head -1) || true
         fi
 
-        if [[ -n "$cdn_domain" && -n "$cdn_path" ]]; then
+        # Read Hysteria params from existing service, then override with CLI args
+        local hy_port hy_port_end hy_obfs
+        hy_port=$(grep -oP '(?<=HYSTERIA_PORT=).+' "$sub_proxy_service") || true
+        hy_port_end=$(grep -oP '(?<=HYSTERIA_PORT_END=).+' "$sub_proxy_service") || true
+        hy_obfs=$(grep -oP '(?<=HYSTERIA_OBFS=).+' "$sub_proxy_service") || true
+
+        # CLI args override service file values (for adding/updating Hysteria)
+        [[ -n "$arg_hy_port" ]] && hy_port="$arg_hy_port"
+        [[ -n "$arg_hy_port_end" ]] && hy_port_end="$arg_hy_port_end"
+        [[ -n "$arg_hy_obfs" ]] && hy_obfs="$arg_hy_obfs"
+
+        # Default port_end if only port provided
+        if [[ -n "$hy_port" && -z "$hy_port_end" ]]; then
+            hy_port_end=$((hy_port + 1000))
+        fi
+
+        if [[ -n "$cdn_domain" && -n "$cdn_path" ]] || [[ -n "$hy_port" && -n "$hy_obfs" ]]; then
             # Read ExecStart from existing service file
             local exec_start
             exec_start=$(grep -oP '(?<=ExecStart=).+' "$sub_proxy_service") || true
 
-            # Symmetric XHTTP CDN link (exit params already extracted at lines 62-68)
-            local cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
+            # CDN links — only when CDN Fallback is configured
+            local cdn_vless_link="" cdn_vless_link_asym=""
+            if [[ -n "$cdn_domain" && -n "$cdn_path" ]]; then
+                # Symmetric XHTTP CDN link
+                cdn_vless_link="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up#CDN%20XHTTP"
 
-            # Asymmetric CDN link with downloadSettings
-            local download_extra extra_encoded cdn_vless_link_asym
-            download_extra=$(jq -n -c \
-                --arg padding "100-1000" \
-                --arg addr "$exit_ip" \
-                --arg sni "$exit_sni" \
-                --arg pubkey "$exit_pubkey" \
-                --arg sid "$exit_short_id" \
-                --arg path "$exit_xhttp_path" \
-                '{
-                    xPaddingBytes: $padding,
-                    downloadSettings: {
-                        address: $addr, port: 443, network: "xhttp",
-                        security: "reality",
-                        realitySettings: {
-                            serverName: $sni, publicKey: $pubkey,
-                            shortId: $sid, fingerprint: "chrome"
-                        },
-                        xhttpSettings: { path: ("/"+$path), mode: "auto" }
-                    }
-                }')
-            extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
-            cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+                # Asymmetric CDN link with downloadSettings.
+                # Upload leg (client→CF→exit): conservative — only padding at top level
+                # (Cloudflare doesn't handle aggressive mux well).
+                # Download leg (client→exit direct via Reality): full extra — same threat
+                # model as direct/relay, same TSPU TLS-policing resistance needed.
+                local download_extra extra_encoded
+                download_extra=$(jq -n -c \
+                    --arg padding "100-1000" \
+                    --arg addr "$exit_ip" \
+                    --arg sni "$exit_sni" \
+                    --arg pubkey "$exit_pubkey" \
+                    --arg sid "$exit_short_id" \
+                    --arg path "$exit_xhttp_path" \
+                    --argjson extra "$extra_json" \
+                    '{
+                        xPaddingBytes: $padding,
+                        downloadSettings: {
+                            address: $addr, port: 443, network: "xhttp",
+                            security: "reality",
+                            realitySettings: {
+                                serverName: $sni, publicKey: $pubkey,
+                                shortId: $sid, fingerprint: "chrome"
+                            },
+                            xhttpSettings: {
+                                path: ("/"+$path),
+                                mode: "auto",
+                                extra: $extra
+                            }
+                        }
+                    }')
+                extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$download_extra")
+                cdn_vless_link_asym="vless://${exit_uuid}@${cdn_domain}:443?type=xhttp&security=tls&sni=${cdn_domain}&host=${cdn_domain}&path=%2F${cdn_path}&mode=packet-up&extra=${extra_encoded}#CDN%20Asymmetric"
+            fi
+
+            # Direct exit link (no relay hop) — always available.
+            # Carries same extra block as relay inbound (XHTTP+Reality, same TSPU threat).
+            local direct_extra_encoded
+            direct_extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$extra_json")
+            local direct_vless_link="vless://${exit_uuid}@${exit_ip}:${exit_port}?type=xhttp&security=reality&sni=${exit_sni}&fp=chrome&pbk=${exit_pubkey}&sid=${exit_short_id}&path=%2F${exit_xhttp_path}&mode=auto&extra=${direct_extra_encoded}#Direct%20Exit"
+
+            # Hysteria 2 link — only when Hysteria is configured
+            local hysteria_link=""
+            if [[ -n "$hy_port" && -n "$hy_obfs" ]]; then
+                hysteria_link="hysteria2://${exit_uuid}@${exit_ip}:${hy_port},${hy_port}-${hy_port_end}/?obfs=salamander&obfs-password=${hy_obfs}&sni=${exit_sni}&insecure=0#Hysteria%202"
+                log_info "Hysteria 2 link updated"
+            fi
+
+            # URL-encoded XHTTP extra — sub-proxy injects into each relay VLESS URL
+            # since 3X-UI's built-in subscription generator does not emit extra=.
+            local relay_extra_encoded
+            relay_extra_encoded=$(python3 -c "import urllib.parse, sys; print(urllib.parse.quote(sys.argv[1]))" "$extra_json")
 
             # Escape % for systemd
             local link_escaped="${cdn_vless_link//%/%%}"
             local link_asym_escaped="${cdn_vless_link_asym//%/%%}"
+            local direct_escaped="${direct_vless_link//%/%%}"
+            local hysteria_escaped="${hysteria_link//%/%%}"
+            local relay_extra_escaped="${relay_extra_encoded//%/%%}"
 
             # Read existing service params
             local sub_upstream sub_proxy_port
@@ -226,15 +358,21 @@ main() {
             # Rewrite entire service file (never sed — & in URLs breaks sed)
             cat > "$sub_proxy_service" << SVCEOF
 [Unit]
-Description=Subscription proxy (appends CDN link)
+Description=Subscription proxy (appends extra links)
 After=x-ui.service
 
 [Service]
 Type=simple
 Environment=CDN_VLESS_LINK=${link_escaped}
 Environment=CDN_VLESS_LINK_ASYM=${link_asym_escaped}
+Environment=DIRECT_VLESS_LINK=${direct_escaped}
+Environment=HYSTERIA_LINK=${hysteria_escaped}
+Environment=HYSTERIA_PORT=${hy_port}
+Environment=HYSTERIA_PORT_END=${hy_port_end}
+Environment=HYSTERIA_OBFS=${hy_obfs}
 Environment=CDN_DOMAIN=${cdn_domain}
 Environment=CDN_PATH=${cdn_path}
+Environment=RELAY_XHTTP_EXTRA=${relay_extra_escaped}
 Environment=SUB_UPSTREAM=${sub_upstream}
 Environment=SUB_PROXY_PORT=${sub_proxy_port}
 ExecStart=${exec_start}
@@ -246,7 +384,7 @@ WantedBy=multi-user.target
 SVCEOF
             systemctl daemon-reload
             systemctl restart sub-proxy
-            log_ok "Sub-proxy updated with XHTTP CDN links"
+            log_ok "Sub-proxy updated"
         fi
     fi
 
@@ -283,6 +421,9 @@ SVCEOF
     echo "==========================================="
     echo ""
     echo "  Template updated from latest codebase"
+    if [[ "$current_network" != "xhttp" ]]; then
+        echo "  Relay inbound migrated from TCP to XHTTP"
+    fi
     if [[ "$upgrade" == true ]]; then
         echo "  3X-UI upgraded to latest version"
     fi
@@ -290,6 +431,9 @@ SVCEOF
     echo "  Clients and subscriptions preserved"
     if [[ "$is_cdn" == true ]]; then
         echo "  CDN fallback inbound preserved"
+    fi
+    if [[ -n "$arg_hy_port" ]]; then
+        echo "  Hysteria 2 link added to subscriptions"
     fi
     echo ""
 }

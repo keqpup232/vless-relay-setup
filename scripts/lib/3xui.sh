@@ -6,6 +6,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 XUI_BIN="${XUI_MAIN_FOLDER:-/usr/local/x-ui}/x-ui"
 XUI_DB="/etc/x-ui/x-ui.db"
 
+# xhttp_extra_json() shared helper now lives in common.sh so xray.sh (exit)
+# and 3xui.sh (relay) use the same values. This prevents mismatch between
+# relay outbound scMaxEachPostBytes and exit inbound cap.
+
 install_3xui() {
     local skip_acme_port="${1:-false}"
 
@@ -92,6 +96,9 @@ configure_3xui_relay_template() {
 
     log_info "Writing xray template config to 3X-UI database..."
 
+    local extra_json
+    extra_json=$(xhttp_extra_json)
+
     local template
     template=$(jq -n -c \
         --arg exit_ip "$exit_ip" \
@@ -102,6 +109,7 @@ configure_3xui_relay_template() {
         --arg exit_sni "$exit_sni" \
         --arg exit_xhttp_path "$exit_xhttp_path" \
         --argjson api_port "$api_port" \
+        --argjson extra "$extra_json" \
         '{
             log: {
                 loglevel: "warning",
@@ -150,15 +158,7 @@ configure_3xui_relay_template() {
                         xhttpSettings: {
                             mode: "auto",
                             path: ("/"+$exit_xhttp_path),
-                            extra: {
-                                xPaddingBytes: "100-1000",
-                                scMinPostsIntervalMs: 30,
-                                xmux: {
-                                    maxConcurrency: "16-32",
-                                    maxConnections: 0,
-                                    cMaxReuseTimes: "64-128"
-                                }
-                            }
+                            extra: $extra
                         },
                         security: "reality",
                         realitySettings: {
@@ -169,7 +169,8 @@ configure_3xui_relay_template() {
                             shortId: $exit_short_id
                         },
                         sockopt: {
-                            dialerProxy: "fragment"
+                            dialerProxy: "fragment",
+                            tcpKeepAliveInterval: 30
                         }
                     }
                 },
@@ -230,6 +231,7 @@ create_3xui_relay_inbound() {
     sub_id="${7:-$(head -c 8 /dev/urandom | xxd -p)}"
     local exit_ip="${8:-}"
     local xver="${9:-0}"
+    local relay_xhttp_path="${10:-$(generate_random_path)}"
 
     # Build inbound name from geo IP (fallback: "Relay → Exit")
     local relay_city exit_city remark
@@ -245,7 +247,7 @@ create_3xui_relay_inbound() {
         '{
             clients: [{
                 id: $uuid,
-                flow: "xtls-rprx-vision",
+                flow: "",
                 email: "default-user",
                 limitIp: 0,
                 totalGB: 0,
@@ -261,6 +263,11 @@ create_3xui_relay_inbound() {
 
     # 3X-UI subscription generator reads publicKey and fingerprint
     # from realitySettings.settings (nested), not from the top level.
+    # xhttpSettings.extra is emitted into VLESS subscription URLs (xmux etc
+    # are client-side hints — server ignores them on inbound).
+    local extra_json
+    extra_json=$(xhttp_extra_json)
+
     stream_settings=$(jq -n -c \
         --arg private_key "$private_key" \
         --arg public_key "$public_key" \
@@ -268,8 +275,10 @@ create_3xui_relay_inbound() {
         --arg dest "$dest" \
         --arg server_name "$server_name" \
         --argjson xver "$xver" \
+        --arg relay_path "$relay_xhttp_path" \
+        --argjson extra "$extra_json" \
         '{
-            network: "tcp",
+            network: "xhttp",
             security: "reality",
             realitySettings: {
                 show: false,
@@ -285,9 +294,10 @@ create_3xui_relay_inbound() {
                     spiderX: ""
                 }
             },
-            tcpSettings: {
-                acceptProxyProtocol: false,
-                header: { type: "none" }
+            xhttpSettings: {
+                path: ("/"+$relay_path),
+                mode: "auto",
+                extra: $extra
             }
         }')
 
@@ -302,6 +312,9 @@ create_3xui_relay_inbound() {
     local s_stream="${stream_settings//\'/\'\'}"
     local s_sniffing="${sniffing//\'/\'\'}"
 
+    # Clean up any existing inbound with the same tag (e.g. --force reinstall)
+    sqlite3 "$XUI_DB" "DELETE FROM inbounds WHERE tag='inbound-443';" || true
+
     sqlite3 "$XUI_DB" "INSERT INTO inbounds (
         user_id, up, down, total, remark, enable, expiry_time,
         listen, port, protocol, settings, stream_settings,
@@ -312,7 +325,7 @@ create_3xui_relay_inbound() {
         'inbound-443', '${s_sniffing}'
     );"
 
-    log_ok "VLESS Reality relay inbound created (port 443, tag inbound-443)"
+    log_ok "VLESS Reality XHTTP relay inbound created (port 443, tag inbound-443)"
     log_info "  Default client subId: $sub_id"
 }
 
@@ -326,7 +339,8 @@ patch_3xui_relay_inbound() {
 
     log_info "Patching relay inbound subscription fields..."
 
-    local current_settings current_stream
+    local current_settings current_stream extra_json
+    extra_json=$(xhttp_extra_json)
 
     # Re-add subId to client settings
     current_settings=$(sqlite3 "$XUI_DB" \
@@ -335,26 +349,37 @@ patch_3xui_relay_inbound() {
     patched_settings=$(echo "$current_settings" | jq -c \
         --arg sub_id "$sub_id" \
         '.clients[0].subId = $sub_id | .clients[0].tgId = "" | .clients[0].reset = 0')
+    if [[ -z "$patched_settings" ]]; then
+        log_error "jq failed to patch client settings (input may be malformed)"
+        exit 1
+    fi
     local s_settings="${patched_settings//\'/\'\'}"
     sqlite3 "$XUI_DB" \
         "UPDATE inbounds SET settings='${s_settings}' WHERE tag='inbound-443';"
 
     # Re-add realitySettings.settings (publicKey + fingerprint for subscription URLs)
+    # Also re-add xhttpSettings.extra (xmux + padding) — 3X-UI may strip it on first normalize
     current_stream=$(sqlite3 "$XUI_DB" \
         "SELECT stream_settings FROM inbounds WHERE tag='inbound-443';")
     local patched_stream
     patched_stream=$(echo "$current_stream" | jq -c \
         --arg public_key "$public_key" \
+        --argjson extra "$extra_json" \
         '.realitySettings.settings = {
             publicKey: $public_key,
             fingerprint: "chrome",
             spiderX: ""
-        }')
+        }
+        | .xhttpSettings.extra = $extra')
+    if [[ -z "$patched_stream" ]]; then
+        log_error "jq failed to patch stream settings (input may be malformed)"
+        exit 1
+    fi
     local s_stream="${patched_stream//\'/\'\'}"
     sqlite3 "$XUI_DB" \
         "UPDATE inbounds SET stream_settings='${s_stream}' WHERE tag='inbound-443';"
 
-    log_ok "Relay inbound patched (subId + publicKey for subscriptions)"
+    log_ok "Relay inbound patched (subId + publicKey + XHTTP extra for subscriptions)"
 }
 
 configure_3xui_subscription() {
