@@ -33,10 +33,29 @@ configure_hysteria() {
     # Copy Caddy's Let's Encrypt certs to Hysteria cert dir
     # Hysteria runs as 'hysteria' user, Caddy certs are root-owned
     local caddy_cert_dir="/root/.local/share/caddy/certificates/acme-v02.api.letsencrypt.org-directory/${selfsteal_domain}"
+    
+    # Wait for Caddy to obtain certificate if not present
     if [[ ! -f "${caddy_cert_dir}/${selfsteal_domain}.crt" ]]; then
-        log_error "Caddy cert not found for ${selfsteal_domain}"
-        log_error "Expected: ${caddy_cert_dir}/${selfsteal_domain}.crt"
-        exit 1
+        log_info "Certificate not found. Requesting from Caddy..."
+        curl -s -o /dev/null --connect-timeout 10 https://${selfsteal_domain}/ 2>/dev/null &
+        
+        local max_attempts=30
+        local attempt=0
+        while [[ ! -f "${caddy_cert_dir}/${selfsteal_domain}.crt" && $attempt -lt $max_attempts ]]; do
+            sleep 1
+            attempt=$((attempt + 1))
+            if [[ $((attempt % 5)) -eq 0 ]]; then
+                log_info "Waiting for certificate... (${attempt}/${max_attempts}s)"
+                curl -s -o /dev/null --connect-timeout 5 https://${selfsteal_domain}/ 2>/dev/null &
+            fi
+        done
+        
+        if [[ ! -f "${caddy_cert_dir}/${selfsteal_domain}.crt" ]]; then
+            log_error "Caddy cert not found for ${selfsteal_domain} after ${max_attempts}s"
+            log_error "Expected: ${caddy_cert_dir}/${selfsteal_domain}.crt"
+            exit 1
+        fi
+        log_ok "Certificate obtained successfully"
     fi
 
     mkdir -p "$HYSTERIA_CERT_DIR"
